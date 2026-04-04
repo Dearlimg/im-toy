@@ -1,0 +1,28 @@
+# Server configuration
+server:
+  port: 8080
+  mode: debug
+
+# MySQL configuration
+mysql:
+  host: localhost
+  port: 3306
+  username: root
+  password: 123456
+  database: im_chat
+  charset: utf8mb4
+
+# Redis configuration
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
+
+# JWT configuration
+jwt:
+  access_secret: "im_chat_access_secret"
+  refresh_secret: "im_chat_refresh_secret"
+  access_expire: 1800  # 30 minutes in seconds
+  refresh_expire: 604800  # 7 days in seconds

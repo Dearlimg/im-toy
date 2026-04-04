@@ -1,0 +1,35 @@
+# Dependencies
+vendor/
+go.sum
+
+# Configuration
+config/config.yaml
+.env
+
+# Build output
+*.exe
+*.out
+*.bin
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage.out
+*.test
+
+# Temporary files
+*.tmp
+*.temp
