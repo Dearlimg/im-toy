@@ -24,11 +24,11 @@ type GroupMember struct {
 type GroupMessage struct {
 	gorm.Model
 	MsgID    string `gorm:"index;unique;size:64" json:"msg_id"`
-	GroupID  string `gorm:"size:64;index" json:"group_id"`
+	GroupID  string `gorm:"size:64;index:idx_group_id_send_time" json:"group_id"`
 	FromUID  string `gorm:"size:64;index" json:"from_uid"`
 	Content  string `gorm:"type:text" json:"content"`
 	Type     int    `json:"type"`
-	SendTime int64  `json:"send_time"`
+	SendTime int64  `gorm:"index:idx_group_id_send_time,sort:desc" json:"send_time"`
 }
 
 func (GroupMessage) TableName() string {
