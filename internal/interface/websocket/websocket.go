@@ -49,7 +49,9 @@ type Message struct {
 type WSMessage struct {
 	Type      string `json:"type"`
 	MsgID     string `json:"msg_id,omitempty"`
+	FromUID   string `json:"from_uid,omitempty"`
 	ToUID     string `json:"to_uid,omitempty"`
+	RoomID    string `json:"room_id,omitempty"`
 	GroupID   string `json:"group_id,omitempty"`
 	Content   string `json:"content,omitempty"`
 	Timestamp int64  `json:"timestamp,omitempty"`
@@ -151,9 +153,51 @@ func (c *Conn) readPump() {
 			handlePrivateMessage(c, &wsMsg)
 		case "group_message":
 			handleGroupMessage(c, &wsMsg)
+		case "read_receipt":
+			handleReadReceipt(c, &wsMsg)
 		default:
 			handleRoomMessage(c, message)
 		}
+	}
+}
+
+func handleReadReceipt(c *Conn, msg *WSMessage) {
+	if msg.MsgID == "" {
+		log.Printf("Invalid read receipt: %+v", msg)
+		return
+	}
+
+	log.Printf("Received read receipt from %s for msg: %s", c.Username, msg.MsgID)
+
+	readRepo := infra_repo.NewUserRoomReadRepository()
+	lastReadTime := time.Now().UnixMilli()
+
+	roomID := msg.RoomID
+	if roomID == "" && msg.FromUID != "" {
+		roomID = msg.FromUID
+	}
+	if roomID == "" {
+		log.Printf("Read receipt missing room_id or from_uid")
+		return
+	}
+
+	if err := readRepo.Upsert(c.UserID, roomID, msg.MsgID, lastReadTime); err != nil {
+		log.Printf("Failed to save read receipt: %v", err)
+	}
+
+	receipt := map[string]interface{}{
+		"type":      "read_receipt",
+		"msg_id":    msg.MsgID,
+		"read_uid":  c.UserID,
+		"room_id":   roomID,
+		"read_time": lastReadTime,
+	}
+
+	var targetMsg entity.PrivateMessage
+	if err := database.DB.Where("msg_id = ?", msg.MsgID).First(&targetMsg).Error; err == nil && targetMsg.FromUID != c.UserID {
+		receiptBytes, _ := json.Marshal(receipt)
+		log.Printf("Pushing read receipt to sender: %s", targetMsg.FromUID)
+		BroadcastToUser(targetMsg.FromUID, receiptBytes)
 	}
 }
 
@@ -231,6 +275,7 @@ func handlePrivateMessage(c *Conn, msg *WSMessage) {
 	}
 
 	SendPrivateMessage(msg.ToUID, wsMsg)
+	SendPrivateMessage(c.UserID, wsMsg)
 	log.Printf("Private message saved and sent: from=%s to=%s", c.UserID, msg.ToUID)
 }
 

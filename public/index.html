@@ -35,20 +35,44 @@
       right: 8px;
       top: 50%;
       transform: translateY(-50%);
-      background: #ff4d4f;
+      background: linear-gradient(135deg, #ff6b6b, #ff4d4f);
       color: white;
       font-size: 11px;
       padding: 2px 7px;
       border-radius: 10px;
       min-width: 18px;
       text-align: center;
+      box-shadow: 0 2px 4px rgba(255, 77, 79, 0.3);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: translateY(-50%) scale(1); }
+      50% { transform: translateY(-50%) scale(1.1); }
     }
     .msg .read-status {
       font-size: 11px;
       color: #999;
       margin-top: 2px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
     }
-    .msg .read-status.unread { color: #1890ff; font-weight: bold; }
+    .msg .read-status.unread {
+      color: #1890ff;
+      font-weight: 500;
+    }
+    .msg .read-status::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #d9d9d9;
+    }
+    .msg .read-status.unread::before {
+      background: #1890ff;
+      box-shadow: 0 0 6px rgba(24, 144, 255, 0.5);
+    }
     #authPage { max-width: 400px; margin: 40px auto; }
     .modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 100; }
     .modal.show { display: flex; }
@@ -456,21 +480,16 @@
       document.getElementById('addFriendModal').classList.remove('show');
     }
 
-    async function reportRead(roomId, lastMsgId) {
-      try {
-        await fetch(API + '/message/report-read', {
-          method: 'POST',
-          headers: authHeader(),
-          body: JSON.stringify({
-            room_id: roomId,
-            last_read_msg_id: lastMsgId
-          })
-        });
-        unreadCounts[roomId] = 0;
-        loadFriends();
-      } catch (e) {
-        console.error('上报已读失败', e);
-      }
+    function reportRead(roomId, lastMsgId, fromUid) {
+      if (!ws || ws.readyState !== WebSocket.OPEN || !lastMsgId) return;
+      ws.send(JSON.stringify({
+        type: 'read_receipt',
+        msg_id: lastMsgId,
+        room_id: roomId,
+        from_uid: fromUid
+      }));
+      unreadCounts[roomId] = 0;
+      loadFriends();
     }
 
     async function getRoomReadStatus(roomId) {
@@ -611,7 +630,7 @@
         
         if (msgs.length > 0) {
           const lastMsg = msgs[msgs.length - 1];
-          reportRead(groupId, lastMsg.msg_id);
+          reportRead(groupId, lastMsg.msg_id, groupId);
         }
 
         box.innerHTML = msgs.map(m => {
@@ -705,9 +724,16 @@
         return;
       }
       if (msg.type === 'private_message') {
+        const isSelf = msg.from_uid === currentUser.uid;
+        if (isSelf) {
+          if (currentChatFriend && currentChatFriend.friend_uid === msg.to_uid) {
+            appendChatLine(true, msg.content, msg.send_time, '我', false, msg.msg_id);
+          }
+          return;
+        }
         if (currentChatFriend && currentChatFriend.friend_uid === msg.from_uid) {
-          appendChatLine(msg.from_uid === currentUser.uid, msg.content, msg.send_time, msg.from_nickname || msg.from_username || msg.from_uid, true, msg.msg_id);
-          reportRead(msg.from_uid, msg.msg_id);
+          appendChatLine(false, msg.content, msg.send_time, msg.from_nickname || msg.from_username || msg.from_uid, true, msg.msg_id);
+          reportRead(msg.from_uid, msg.msg_id, msg.from_uid);
         } else {
           unreadCounts[msg.from_uid] = (unreadCounts[msg.from_uid] || 0) + 1;
           loadFriends();
@@ -728,10 +754,22 @@
     }
 
     function updateMessageReadStatus(msgId, isRead) {
-      const msgEl = document.querySelector(`.msg[data-msg-id="${esc(msgId)}"]`);
+      const allMsgs = document.querySelectorAll('.msg[data-msg-id]');
+      let msgEl = null;
+      for (let i = 0; i < allMsgs.length; i++) {
+        if (allMsgs[i].getAttribute('data-msg-id') === msgId) {
+          msgEl = allMsgs[i];
+          break;
+        }
+      }
       if (msgEl) {
         const readStatusEl = msgEl.querySelector('.read-status');
         if (readStatusEl) {
+          msgEl.style.transition = 'all 0.3s ease';
+          msgEl.style.backgroundColor = '#f0f9ff';
+          setTimeout(() => {
+            msgEl.style.backgroundColor = '';
+          }, 500);
           readStatusEl.textContent = isRead ? '已读' : '未读';
           readStatusEl.classList.toggle('unread', !isRead);
         }
@@ -763,7 +801,7 @@
           content: content,
           timestamp: Date.now()
         }));
-        appendChatLine(true, content, Date.now(), '我', false, '');
+        appendChatLine(true, content, Date.now(), '我', true, '');
         input.value = '';
         return;
       }
@@ -773,7 +811,6 @@
         content: content,
         timestamp: Date.now()
       }));
-      appendChatLine(true, content, Date.now(), '我', false, '');
       input.value = '';
     }
 
