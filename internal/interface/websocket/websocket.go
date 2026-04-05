@@ -304,7 +304,6 @@ func handlePrivateMessage(c *Conn, msg *WSMessage) {
 		}
 	}
 
-	SendToUser(msg.ToUID, wsMsg)
 	SendToUser(c.UserID, wsMsg)
 }
 

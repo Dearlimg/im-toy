@@ -6,6 +6,7 @@ import (
 	"log"
 	"sync"
 
+	"im-chat/internal/infra/redis"
 	infra_repo "im-chat/internal/infra/repository"
 
 	"github.com/IBM/sarama"
@@ -157,8 +158,15 @@ func (h *pusherHandler) pushPrivateMessage(event *PrivateMessageEvent) {
 		"send_time": event.SendTime,
 	}
 
+	if redis.Cache != nil {
+		userInfo, _ := redis.Cache.GetUserInfo(event.FromUID)
+		if userInfo != nil {
+			wsPayload["from_username"] = userInfo.Username
+			wsPayload["from_nickname"] = userInfo.Nickname
+		}
+	}
+
 	if globalPusher != nil {
 		globalPusher.PushToUser(event.ToUID, wsPayload)
-		globalPusher.PushToUser(event.FromUID, wsPayload)
 	}
 }
