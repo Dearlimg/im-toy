@@ -5,7 +5,6 @@ import (
 	domain_repo "im-chat/internal/domain/repository"
 	"im-chat/internal/infra/database"
 	"im-chat/internal/infra/idgen"
-	infra_repo "im-chat/internal/infra/repository"
 	"im-chat/internal/interface/http/response"
 	ws "im-chat/internal/interface/websocket"
 	"log"
@@ -20,10 +19,10 @@ type PrivateMessageHandler struct {
 	readRepo domain_repo.UserRoomReadRepository
 }
 
-func NewPrivateMessageHandler() *PrivateMessageHandler {
+func NewPrivateMessageHandler(msgRepo domain_repo.PrivateMessageRepository, readRepo domain_repo.UserRoomReadRepository) *PrivateMessageHandler {
 	return &PrivateMessageHandler{
-		msgRepo:  infra_repo.NewPrivateMessageRepository(),
-		readRepo: infra_repo.NewUserRoomReadRepository(),
+		msgRepo:  msgRepo,
+		readRepo: readRepo,
 	}
 }
 

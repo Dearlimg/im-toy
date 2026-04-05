@@ -5,7 +5,6 @@ import (
 	"im-chat/internal/domain/entity"
 	domain_repo "im-chat/internal/domain/repository"
 	"im-chat/internal/infra/database"
-	infra_repo "im-chat/internal/infra/repository"
 	"im-chat/internal/interface/http/response"
 	ws "im-chat/internal/interface/websocket"
 	"time"
@@ -17,9 +16,9 @@ type MessageHandler struct {
 	readRepo domain_repo.UserRoomReadRepository
 }
 
-func NewMessageHandler() *MessageHandler {
+func NewMessageHandler(readRepo domain_repo.UserRoomReadRepository) *MessageHandler {
 	return &MessageHandler{
-		readRepo: infra_repo.NewUserRoomReadRepository(),
+		readRepo: readRepo,
 	}
 }
 

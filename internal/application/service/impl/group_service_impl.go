@@ -8,16 +8,17 @@ import (
 	"im-chat/internal/domain/repository"
 	"im-chat/internal/infra/database"
 	"im-chat/internal/infra/idgen"
-	infra_repo "im-chat/internal/infra/repository"
 )
 
 type GroupServiceImpl struct {
-	groupRepo repository.GroupRepository
+	groupRepo       repository.GroupRepository
+	messageReadRepo repository.MessageReadRepository
 }
 
-func NewGroupServiceImpl(groupRepo repository.GroupRepository) service.GroupService {
+func NewGroupServiceImpl(groupRepo repository.GroupRepository, messageReadRepo repository.MessageReadRepository) service.GroupService {
 	return &GroupServiceImpl{
-		groupRepo: groupRepo,
+		groupRepo:       groupRepo,
+		messageReadRepo: messageReadRepo,
 	}
 }
 
@@ -166,8 +167,7 @@ func (s *GroupServiceImpl) GetGroupMessages(currentUID, groupID string, limit in
 		userMap[u.UID] = u
 	}
 
-	readRepo := infra_repo.NewMessageReadRepository()
-	readCountMap, _ := readRepo.BatchGetReadCount(msgIDs)
+	readCountMap, _ := s.messageReadRepo.BatchGetReadCount(msgIDs)
 
 	var resp []*dto.GroupMessageResp
 	for i := len(messages) - 1; i >= 0; i-- {
