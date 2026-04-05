@@ -113,9 +113,31 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user entity.User
-	if err := database.DB.Where("uid = ?", claims.UID).First(&user).Error; err != nil {
-		http.Error(w, "User not found", http.StatusUnauthorized)
-		return
+	userID := claims.UID
+
+	if redis.Cache != nil {
+		userInfo, _ := redis.Cache.GetUserInfo(userID)
+		if userInfo != nil {
+			user.UID = userInfo.UID
+			user.Username = userInfo.Username
+			user.Nickname = userInfo.Nickname
+			user.Avatar = userInfo.Avatar
+		}
+	}
+
+	if user.UID == "" {
+		if err := database.DB.Where("uid = ?", userID).First(&user).Error; err != nil {
+			http.Error(w, "User not found", http.StatusUnauthorized)
+			return
+		}
+		if redis.Cache != nil {
+			redis.Cache.SetUserInfo(userID, &redis.UserBasicInfo{
+				UID:      user.UID,
+				Username: user.Username,
+				Nickname: user.Nickname,
+				Avatar:   user.Avatar,
+			})
+		}
 	}
 
 	wsConn, err := upgrader.Upgrade(w, r, nil)
@@ -481,13 +503,6 @@ func SendToUser(uid string, msg map[string]interface{}) {
 }
 
 func SendBytesToUser(uid string, msgBytes []byte) {
-	if redis.Cache != nil {
-		online, _ := redis.Cache.IsUserOnline(uid)
-		if !online {
-			return
-		}
-	}
-
 	mu.RLock()
 	conn, exists := userConns[uid]
 	mu.RUnlock()
@@ -497,6 +512,12 @@ func SendBytesToUser(uid string, msgBytes []byte) {
 		case conn.SendChan <- msgBytes:
 		default:
 			log.Printf("send queue full for uid=%s", uid)
+		}
+	} else {
+		if !exists {
+			log.Printf("user not connected: uid=%s", uid)
+		} else {
+			log.Printf("user connection closed: uid=%s", uid)
 		}
 	}
 }

@@ -715,8 +715,41 @@
       return d.innerHTML;
     }
 
+    let heartbeatTimer = null;
+
+    function startHeartbeat() {
+      stopHeartbeat();
+      heartbeatTimer = setInterval(function() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({type: 'heartbeat', ts: Date.now()}));
+        }
+      }, 20000);
+    }
+
+    function stopHeartbeat() {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    }
+
+    let wsReconnectTimer = null;
+    let wsConnecting = false;
+
     function connectWS() {
       if (!token) return;
+      if (wsConnecting) return;
+      stopHeartbeat();
+      if (wsReconnectTimer) {
+        clearTimeout(wsReconnectTimer);
+        wsReconnectTimer = null;
+      }
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+        ws = null;
+      }
+      wsConnecting = true;
       const url = wsRoomURL(token);
       ws = new WebSocket(url);
       ws.onmessage = function(ev) {
@@ -726,8 +759,18 @@
           } catch (e) {}
         });
       };
+      ws.onopen = function() {
+        wsConnecting = false;
+        startHeartbeat();
+      };
       ws.onclose = function() {
-        setTimeout(connectWS, 3000);
+        wsConnecting = false;
+        stopHeartbeat();
+        wsReconnectTimer = setTimeout(connectWS, 3000);
+      };
+      ws.onerror = function(err) {
+        wsConnecting = false;
+        console.error('WebSocket error:', err);
       };
     }
 
