@@ -2,7 +2,6 @@ package socket
 
 import (
 	"errors"
-	"im-chat/internal/infra/jwt"
 	"log"
 	"strconv"
 
@@ -13,26 +12,26 @@ func NewSocketServer() *socketio.Server {
 	server := socketio.NewServer(nil)
 
 	server.OnConnect("/", func(s socketio.Conn) error {
-		// Get token from query parameter
+		// Get user ID from query parameter (simplified for demo)
 		url := s.URL()
-		token := url.Query().Get("token")
-		if token == "" {
-			return errors.New("missing token")
+		userIDStr := url.Query().Get("user_id")
+		if userIDStr == "" {
+			return errors.New("missing user_id")
 		}
 
-		// Parse token
-		claims, err := jwt.ParseAccessToken(token)
+		// Parse user ID
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
 		if err != nil {
-			return err
+			return errors.New("invalid user_id")
 		}
 
 		// Store user ID in socket context
-		s.SetContext(claims.UserID)
+		s.SetContext(userID)
 
 		// Join personal room for private chat
-		s.Join("user_" + strconv.FormatInt(claims.UserID, 10))
+		s.Join("user_" + userIDStr)
 
-		log.Printf("User %d connected", claims.UserID)
+		log.Printf("User %d connected", userID)
 		return nil
 	})
 

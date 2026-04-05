@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.IO 即时通讯</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 800px;
+            height: 600px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px 10px 0 0;
+            text-align: center;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f5f5f5;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 20px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+        }
+
+        .received-message {
+            background: white;
+            color: #333;
+            margin-right: auto;
+            border: 1px solid #ddd;
+        }
+
+        .server-message {
+            background: #f0f0f0;
+            color: #666;
+            text-align: center;
+            max-width: 100%;
+            margin: 10px auto;
+            font-size: 12px;
+        }
+
+        .chat-input {
+            display: flex;
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #eee;
+        }
+
+        #user-id {
+            width: 100px;
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            font-size: 14px;
+            margin-right: 10px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #user-id:focus {
+            border-color: #667eea;
+        }
+
+        #recv-id {
+            width: 100px;
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            font-size: 14px;
+            margin-right: 10px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #recv-id:focus {
+            border-color: #667eea;
+        }
+
+        #message-input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #message-input:focus {
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 12px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-left: 10px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>📱 Socket.IO 即时通讯</h1>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input">
+            <input type="text" id="user-id" placeholder="用户ID" value="1">
+            <input type="text" id="recv-id" placeholder="接收ID" value="2">
+            <input type="text" id="message-input" placeholder="输入消息...">
+            <button onclick="connect()">连接</button>
+            <button onclick="sendMessage()">发送</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        let socket;
+        const chatMessages = document.getElementById('chat-messages');
+        const messageInput = document.getElementById('message-input');
+        const userIdInput = document.getElementById('user-id');
+        const recvIdInput = document.getElementById('recv-id');
+
+        function connect() {
+            const userId = userIdInput.value || '1';
+            
+            if (socket) {
+                socket.disconnect();
+            }
+
+            socket = io('http://localhost:8080', {
+                query: {
+                    user_id: userId
+                }
+            });
+
+            socket.on('connect', function() {
+                addMessage(`✅ 用户 ${userId} 已连接`, 'server');
+            });
+
+            socket.on('new_msg', function(data) {
+                addMessage(`👤 用户 ${data.send_id}: ${data.content}`, 'received');
+            });
+
+            socket.on('disconnect', function() {
+                addMessage('❌ 已断开连接', 'server');
+            });
+
+            socket.on('connect_error', function(error) {
+                addMessage(`❌ 连接错误: ${error}`, 'server');
+            });
+        }
+
+        function sendMessage() {
+            if (!socket || !socket.connected) {
+                addMessage('⚠️ 请先连接服务器', 'server');
+                return;
+            }
+
+            const message = messageInput.value.trim();
+            const recvId = recvIdInput.value;
+            
+            if (message && recvId) {
+                socket.emit('private_chat', {
+                    recv_id: recvId,
+                    content: message
+                });
+                addMessage(`💬 我: ${message}`, 'user');
+                messageInput.value = '';
+            }
+        }
+
+        function addMessage(text, type) {
+            const div = document.createElement('div');
+            div.className = `message ${type}-message`;
+            div.textContent = text;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // 按回车键发送消息
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // 自动连接
+        window.onload = function() {
+            connect();
+        };
+    </script>
+</body>
+</html>

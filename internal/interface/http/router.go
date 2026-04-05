@@ -1,8 +1,14 @@
 package http
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
 
 func RegisterRoutes(r *gin.Engine) {
+	// Serve static files
+	r.StaticFS("/public", http.Dir("public"))
 	// Public routes
 	public := r.Group("/api")
 	{
