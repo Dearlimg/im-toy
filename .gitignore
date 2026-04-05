@@ -33,3 +33,4 @@ coverage.out
 # Temporary files
 *.tmp
 *.temp
+/frontend/

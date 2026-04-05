@@ -14,7 +14,8 @@ func NewSocketServer() *socketio.Server {
 
 	server.OnConnect("/", func(s socketio.Conn) error {
 		// Get token from query parameter
-		token := s.URL().Query().Get("token")
+		url := s.URL()
+		token := url.Query().Get("token")
 		if token == "" {
 			return errors.New("missing token")
 		}

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #chat-container {
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        #message-input {
+            width: 70%;
+            padding: 8px;
+        }
+        #room-input {
+            width: 20%;
+            padding: 8px;
+        }
+        button {
+            padding: 8px 16px;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .server-message {
+            background-color: #f0f0f0;
+            color: #666;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            color: #1565c0;
+        }
+        .received-message {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Chat</h1>
+    <div id="chat-container"></div>
+    <input type="text" id="room-input" placeholder="Room name">
+    <input type="text" id="message-input" placeholder="Type a message...">
+    <button onclick="connect()">Connect</button>
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        var socket;
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message-input');
+        const roomInput = document.getElementById('room-input');
+
+        function connect() {
+            const room = roomInput.value || 'default';
+            socket = new WebSocket(`ws://localhost:8080/room?room=${room}`);
+
+            socket.onopen = function(event) {
+                addMessage('✅ Connected to server', 'server');
+            };
+
+            socket.onmessage = function(event) {
+                addMessage(`💬 ${event.data}`, 'received');
+            };
+
+            socket.onclose = function(event) {
+                addMessage('❌ Disconnected from server', 'server');
+            };
+
+            socket.onerror = function(error) {
+                addMessage(`❌ Error: ${error}`, 'server');
+            };
+        }
+
+        function sendMessage() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                addMessage('⚠️ Not connected to server', 'server');
+                return;
+            }
+
+            const message = messageInput.value;
+            if (message) {
+                socket.send(message);
+                addMessage(`💬 ${message}`, 'user');
+                messageInput.value = '';
+            }
+        }
+
+        function addMessage(text, type) {
+            const div = document.createElement('div');
+            div.className = `message ${type}-message`;
+            div.textContent = text;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    </script>
+</body>
+</html>
