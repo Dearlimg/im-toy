@@ -42,8 +42,16 @@ type RedisConfig struct {
 }
 
 type KafkaConfig struct {
-	Brokers []string `mapstructure:"brokers"`
-	Topic   string   `mapstructure:"topic"`
+	Brokers []string    `mapstructure:"brokers"`
+	Topic   string      `mapstructure:"topic"`
+	Topics  KafkaTopics `mapstructure:"topics"`
+}
+
+type KafkaTopics struct {
+	GroupMsgRaw     string `mapstructure:"group_msg_raw"`
+	GroupMsgPublish string `mapstructure:"group_msg_publish"`
+	PrivateMsg      string `mapstructure:"private_msg"`
+	ReadEvents      string `mapstructure:"read_events"`
 }
 
 type JWTConfig struct {

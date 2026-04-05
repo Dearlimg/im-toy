@@ -22,6 +22,17 @@ redis:
   db: 0
   pool_size: 10
 
+# Kafka configuration
+kafka:
+  brokers:
+    - "0.0.0.0:9092"
+  topic: "im_message"
+  topics:
+    group_msg_raw: "group-msg-raw"
+    group_msg_publish: "group-msg-publish"
+    private_msg: "private-msg"
+    read_events: "read-events"
+
 # JWT configuration
 jwt:
   access_secret: "im_chat_access_secret"

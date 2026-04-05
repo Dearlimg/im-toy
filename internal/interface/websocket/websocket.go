@@ -12,6 +12,7 @@ import (
 	"im-chat/internal/infra/database"
 	"im-chat/internal/infra/idgen"
 	"im-chat/internal/infra/jwt"
+	"im-chat/internal/infra/kafka"
 	"im-chat/internal/infra/redis"
 	infra_repo "im-chat/internal/infra/repository"
 
@@ -276,25 +277,19 @@ func handlePrivateMessage(c *Conn, msg *WSMessage) {
 	msgID := idgen.Gen.NextUID()
 	sendTime := time.Now().UnixMilli()
 
-	newMsg := &entity.PrivateMessage{
+	event := kafka.PrivateMessageEvent{
 		MsgID:    msgID,
 		FromUID:  c.UserID,
 		ToUID:    msg.ToUID,
 		Content:  msg.Content,
-		Type:     1,
 		SendTime: sendTime,
-		Read:     0,
 	}
 
-	msgRepo := infra_repo.NewPrivateMessageRepository()
-	if err := msgRepo.Create(newMsg); err != nil {
-		log.Printf("Failed to save private message: %v", err)
-		return
-	}
+	kafka.Publish(kafka.TopicPrivateMsg, msg.ToUID, &event)
 
 	wsMsg := map[string]interface{}{
 		"type":      "private_message",
-		"msg_id":    newMsg.MsgID,
+		"msg_id":    msgID,
 		"from_uid":  c.UserID,
 		"to_uid":    msg.ToUID,
 		"content":   msg.Content,
@@ -323,25 +318,23 @@ func handleGroupMessage(c *Conn, msg *WSMessage) {
 		return
 	}
 
-	msgID := idgen.GenerateMsgID()
+	msgID := idgen.Gen.NextUID()
 	sendTime := time.Now().UnixMilli()
 
-	newMsg := &entity.GroupMessage{
+	event := kafka.GroupMessageEvent{
 		MsgID:    msgID,
 		GroupID:  msg.GroupID,
 		FromUID:  c.UserID,
 		Content:  msg.Content,
-		Type:     2,
 		SendTime: sendTime,
 	}
 
-	if err := groupRepo.CreateMessage(newMsg); err != nil {
-		return
-	}
+	kafka.Publish(kafka.TopicGroupMsgRaw, msg.GroupID, &event)
+	kafka.Publish(kafka.TopicGroupMsgPublish, msg.GroupID, &event)
 
 	wsPayload := map[string]interface{}{
 		"type":      "group_message",
-		"msg_id":    newMsg.MsgID,
+		"msg_id":    msgID,
 		"group_id":  msg.GroupID,
 		"from_uid":  c.UserID,
 		"content":   msg.Content,
@@ -356,28 +349,7 @@ func handleGroupMessage(c *Conn, msg *WSMessage) {
 		}
 	}
 
-	var members []string
-	if redis.Cache != nil {
-		members, _ = redis.Cache.GetGroupMembers(msg.GroupID)
-	}
-
-	if len(members) == 0 {
-		dbMembers, _ := groupRepo.FindMembersByGroupID(msg.GroupID)
-		members = make([]string, 0, len(dbMembers))
-		for _, m := range dbMembers {
-			members = append(members, m.UID)
-		}
-		if redis.Cache != nil && len(members) > 0 {
-			redis.Cache.SetGroupMembers(msg.GroupID, members)
-		}
-	}
-
-	wsPayload["total_count"] = len(members)
-
-	msgBytes, _ := json.Marshal(wsPayload)
-	for _, m := range members {
-		SendBytesToUser(m, msgBytes)
-	}
+	SendToUser(c.UserID, wsPayload)
 }
 
 func handleReadReceipt(c *Conn, msg *WSMessage) {
@@ -419,29 +391,29 @@ func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
 	}
 
 	readTime := time.Now().UnixMilli()
-	groupRepo := infra_repo.NewGroupRepository()
 	cache := redis.GetCache()
+	groupRepo := infra_repo.NewGroupRepository()
 
 	for _, msgID := range msg.MsgIDs {
 		cache.AddMsgRead(msgID, c.UserID)
-		cache.AddMsgReadPending(msgID, readTime)
+
+		event := kafka.ReadEvent{
+			MsgID:    msgID,
+			UID:      c.UserID,
+			GroupID:  msg.GroupID,
+			ReadTime: readTime,
+		}
+		kafka.Publish(kafka.TopicReadEvents, msgID, &event)
 	}
 
 	members, _ := groupRepo.FindMembersByGroupID(msg.GroupID)
 	totalCount := len(members)
 
 	readCountMap, _ := redis.BatchGetMsgReadCount(msg.MsgIDs)
-	msgMap := make(map[string]*entity.GroupMessage)
-	if len(msg.MsgIDs) > 0 {
-		messages, _ := groupRepo.FindMessagesByMsgIDs(msg.MsgIDs)
-		for i := range messages {
-			msgMap[messages[i].MsgID] = messages[i]
-		}
-	}
 
 	for _, msgID := range msg.MsgIDs {
-		groupMsg, exists := msgMap[msgID]
-		if !exists || groupMsg.FromUID == c.UserID {
+		groupMsg, err := groupRepo.FindMessagesByMsgIDs([]string{msgID})
+		if err != nil || len(groupMsg) == 0 || groupMsg[0].FromUID == c.UserID {
 			continue
 		}
 
@@ -455,7 +427,7 @@ func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
 			"read_time":   readTime,
 		}
 		receiptBytes, _ := json.Marshal(receipt)
-		SendBytesToUser(groupMsg.FromUID, receiptBytes)
+		SendBytesToUser(groupMsg[0].FromUID, receiptBytes)
 	}
 }
 
@@ -560,4 +532,16 @@ func (c *Conn) cleanup() {
 
 		log.Printf("User %s left room: %s", c.Username, c.RoomID)
 	}
+}
+
+type WSPusher struct{}
+
+func (p *WSPusher) PushToUser(uid string, msg map[string]interface{}) {
+	SendToUser(uid, msg)
+}
+
+var wsPusherInstance = &WSPusher{}
+
+func init() {
+	kafka.RegisterPusher(wsPusherInstance)
 }
