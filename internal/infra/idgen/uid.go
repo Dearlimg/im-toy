@@ -26,3 +26,15 @@ func (g *UIDGenerator) NextUID() string {
 
 	return fmt.Sprintf("%09d", uid)
 }
+
+func GenerateMsgID() string {
+	g := Gen
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	now := time.Now().UnixMilli()
+	seq := g.sequence % 10000
+	g.sequence++
+
+	return fmt.Sprintf("%d%04d", now, seq)
+}

@@ -48,24 +48,37 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	room := r.URL.Query().Get("room")
 	token := r.URL.Query().Get("token")
 
+	log.Printf("WebSocket connection attempt - room: %s, token: %s", room, func() string {
+		if len(token) > 20 {
+			return token[:20] + "..."
+		}
+		return token
+	}())
+
 	if room == "" {
+		log.Println("WebSocket error: room parameter missing")
 		http.Error(w, "Room parameter is required", http.StatusBadRequest)
 		return
 	}
 
 	if token == "" {
+		log.Println("WebSocket error: token parameter missing")
 		http.Error(w, "Token parameter is required", http.StatusUnauthorized)
 		return
 	}
 
 	claims, err := jwt.ParseToken(token)
 	if err != nil {
+		log.Printf("WebSocket error: invalid token - %v", err)
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
 	}
 
+	log.Printf("WebSocket token valid, uid: %s", claims.UID)
+
 	var user entity.User
 	if err := database.DB.Where("uid = ?", claims.UID).First(&user).Error; err != nil {
+		log.Printf("WebSocket error: user not found - %v", err)
 		http.Error(w, "User not found", http.StatusUnauthorized)
 		return
 	}
@@ -181,5 +194,38 @@ func (c *Conn) cleanup() {
 		delete(rooms[c.RoomID], c)
 		delete(userConns, c.UserID)
 		log.Printf("User %s left room: %s", c.Username, c.RoomID)
+	}
+}
+
+func SendPrivateMessage(toUID string, msg map[string]interface{}) {
+	msgBytes, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("Failed to marshal private message: %v", err)
+		return
+	}
+
+	mu.Lock()
+	conn, exists := userConns[toUID]
+	mu.Unlock()
+
+	if exists && !conn.Closed {
+		select {
+		case conn.SendChan <- msgBytes:
+		default:
+			log.Printf("Failed to send private message to %s: send chan full", toUID)
+		}
+	}
+}
+
+func BroadcastToUser(uid string, msg []byte) {
+	mu.Lock()
+	conn, exists := userConns[uid]
+	mu.Unlock()
+
+	if exists && !conn.Closed {
+		select {
+		case conn.SendChan <- msg:
+		default:
+		}
 	}
 }

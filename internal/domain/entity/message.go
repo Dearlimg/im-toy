@@ -4,11 +4,17 @@ import (
 	"gorm.io/gorm"
 )
 
-type Message struct {
+type PrivateMessage struct {
 	gorm.Model
-	SendID   int64  `gorm:"not null" json:"send_id"`
-	RecvID   int64  `gorm:"not null" json:"recv_id"`
-	Type     int    `gorm:"not null;comment:'1私聊 2群聊'" json:"type"`
-	Content  string `gorm:"type:text;not null" json:"content"`
-	SendTime int64  `gorm:"not null" json:"send_time"`
+	MsgID    string `gorm:"size:40;uniqueIndex;not null" json:"msg_id"`
+	FromUID  string `gorm:"size:32;index;not null" json:"from_uid"`
+	ToUID    string `gorm:"size:32;index;not null" json:"to_uid"`
+	Content  string `gorm:"size:2000;not null" json:"content"`
+	Type     int    `gorm:"default:1" json:"type"`
+	SendTime int64  `gorm:"index" json:"send_time"`
+	Read     int    `gorm:"default:0" json:"read"`
+}
+
+func (PrivateMessage) TableName() string {
+	return "private_messages"
 }

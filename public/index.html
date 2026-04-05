@@ -21,7 +21,7 @@
             padding: 20px;
         }
 
-        .container {
+        .auth-container {
             width: 100%;
             max-width: 480px;
         }
@@ -103,7 +103,7 @@
 
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
         }
 
         .btn:active {
@@ -114,114 +114,282 @@
             margin-top: 20px;
             padding: 12px;
             border-radius: 8px;
-            font-size: 14px;
+            text-align: center;
             display: none;
         }
 
         .message.success {
-            display: block;
-            background: #e8f5e9;
-            color: #2e7d32;
+            background: #d4edda;
+            color: #155724;
         }
 
         .message.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .message.show {
             display: block;
-            background: #ffebee;
-            color: #c62828;
         }
 
         .chat-container {
-            display: none;
+            width: 100%;
+            max-width: 1200px;
+            height: 90vh;
             background: white;
             border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-            height: 600px;
-            max-width: 800px;
-            width: 100%;
-        }
-
-        .chat-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            overflow: hidden;
         }
 
-        .chat-header h2 {
-            font-size: 20px;
+        .sidebar {
+            width: 280px;
+            background: #f8f9fa;
+            border-right: 1px solid #eee;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            background: white;
+            border-bottom: 1px solid #eee;
         }
 
         .user-info {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+            margin-bottom: 15px;
         }
 
-        .user-info span {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 14px;
+        .user-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .user-details {
+            flex: 1;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .user-uid {
+            font-size: 12px;
+            color: #888;
         }
 
         .logout-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            color: white;
             padding: 8px 16px;
+            background: #f44336;
+            color: white;
+            border: none;
             border-radius: 6px;
             cursor: pointer;
             font-size: 14px;
         }
 
-        .logout-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
+        .sidebar-tabs {
+            display: flex;
+            border-bottom: 1px solid #eee;
         }
 
-        .chat-messages {
-            height: 420px;
+        .sidebar-tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            background: white;
+            border: none;
+        }
+
+        .sidebar-tab.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .search-box {
+            padding: 15px;
+            background: white;
+            border-bottom: 1px solid #eee;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .search-input:focus {
+            border-color: #667eea;
+        }
+
+        .list-container {
+            flex: 1;
             overflow-y: auto;
-            padding: 20px;
-            background: #f5f7fa;
         }
 
-        .chat-message {
-            margin-bottom: 16px;
+        .friend-item {
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background 0.2s;
+        }
+
+        .friend-item:hover {
+            background: #f0f0f0;
+        }
+
+        .friend-item.active {
+            background: #e8eaf6;
+        }
+
+        .friend-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+
+        .friend-info {
+            flex: 1;
+        }
+
+        .friend-name {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .friend-status {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .unread-badge {
+            background: #f44336;
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            min-width: 20px;
+            text-align: center;
+        }
+
+        .chat-main {
+            flex: 1;
             display: flex;
             flex-direction: column;
         }
 
-        .chat-message.own {
-            align-items: flex-end;
+        .chat-header {
+            padding: 20px;
+            background: white;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .room-input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            width: 120px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f5f5f5;
         }
 
         .message-bubble {
-            max-width: 70%;
-            padding: 12px 16px;
-            border-radius: 12px;
-            background: white;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: flex;
+            margin-bottom: 16px;
         }
 
-        .chat-message.own .message-bubble {
+        .message-bubble.self {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .message-bubble.self .message-content {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
 
-        .message-meta {
+        .message-sender {
             font-size: 12px;
             color: #888;
-            margin-top: 4px;
+            margin-bottom: 4px;
         }
 
-        .chat-message.own .message-meta {
-            text-align: right;
+        .message-bubble.self .message-sender {
+            color: rgba(255,255,255,0.8);
         }
 
-        .chat-input {
+        .message-text {
+            word-break: break-word;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #aaa;
+            margin-top: 6px;
+        }
+
+        .message-bubble.self .message-time {
+            color: rgba(255,255,255,0.7);
+        }
+
+        .system-message {
+            text-align: center;
+            color: #888;
+            font-size: 13px;
+            margin: 16px 0;
+        }
+
+        .chat-input-area {
             padding: 20px;
             background: white;
             border-top: 1px solid #eee;
@@ -229,322 +397,691 @@
             gap: 12px;
         }
 
-        .room-input {
-            width: 120px;
-            padding: 12px;
-            border: 2px solid #eee;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-
-        .room-input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .message-input {
+        .chat-input {
             flex: 1;
-            padding: 12px 16px;
+            padding: 14px 18px;
             border: 2px solid #eee;
-            border-radius: 8px;
-            font-size: 16px;
+            border-radius: 24px;
+            font-size: 15px;
+            outline: none;
+            resize: none;
         }
 
-        .message-input:focus {
-            outline: none;
+        .chat-input:focus {
             border-color: #667eea;
         }
 
         .send-btn {
-            padding: 12px 24px;
+            padding: 14px 28px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-radius: 8px;
-            font-size: 16px;
+            border-radius: 24px;
             font-weight: 600;
             cursor: pointer;
+            transition: transform 0.2s;
         }
 
         .send-btn:hover {
-            opacity: 0.9;
+            transform: translateY(-2px);
         }
 
-        .send-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .add-friend-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
         }
 
-        .system-message {
-            text-align: center;
-            color: #888;
-            font-size: 14px;
-            margin: 16px 0;
+        .add-friend-modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            width: 400px;
+            max-width: 90%;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .modal-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .modal-btn.cancel {
+            background: #eee;
+            color: #333;
+        }
+
+        .modal-btn.confirm {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .search-results {
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .search-result-item {
+            padding: 12px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .add-btn {
+            padding: 6px 14px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .request-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .request-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .accept-btn {
+            padding: 6px 12px;
+            background: #4caf50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .hidden {
+            display: none !important;
         }
     </style>
 </head>
 <body>
-    <div class="container" id="auth-container">
+    <div id="authPage" class="auth-container">
         <div class="card">
-            <h1>IM 聊天室</h1>
+            <h1>💬 IM 聊天室</h1>
             <div class="tabs">
-                <div class="tab active" data-tab="login">登录</div>
-                <div class="tab" data-tab="register">注册</div>
+                <div class="tab active" onclick="switchTab('login')">登录</div>
+                <div class="tab" onclick="switchTab('register')">注册</div>
             </div>
-            
-            <form id="login-form">
+
+            <div id="loginForm">
                 <div class="form-group">
                     <label>用户名</label>
-                    <input type="text" id="login-username" placeholder="请输入用户名" required>
+                    <input type="text" id="loginUsername" placeholder="请输入用户名">
                 </div>
                 <div class="form-group">
                     <label>密码</label>
-                    <input type="password" id="login-password" placeholder="请输入密码" required>
+                    <input type="password" id="loginPassword" placeholder="请输入密码">
                 </div>
-                <button type="submit" class="btn">登录</button>
-            </form>
-            
-            <form id="register-form" style="display: none;">
+                <button class="btn" onclick="login()">登录</button>
+            </div>
+
+            <div id="registerForm" class="hidden">
                 <div class="form-group">
                     <label>用户名</label>
-                    <input type="text" id="register-username" placeholder="请输入用户名 (2-20字符)" required>
+                    <input type="text" id="regUsername" placeholder="请输入用户名">
                 </div>
                 <div class="form-group">
                     <label>昵称</label>
-                    <input type="text" id="register-nickname" placeholder="请输入昵称 (2-20字符)" required>
+                    <input type="text" id="regNickname" placeholder="请输入昵称">
                 </div>
                 <div class="form-group">
                     <label>密码</label>
-                    <input type="password" id="register-password" placeholder="请输入密码 (6-20字符)" required>
+                    <input type="password" id="regPassword" placeholder="请输入密码">
                 </div>
-                <button type="submit" class="btn">注册</button>
-            </form>
-            
+                <button class="btn" onclick="register()">注册</button>
+            </div>
+
             <div id="message" class="message"></div>
         </div>
     </div>
 
-    <div class="chat-container" id="chat-container">
-        <div class="chat-header">
-            <h2>聊天室</h2>
-            <div class="user-info">
-                <span id="user-display"></span>
-                <button class="logout-btn" onclick="logout()">退出</button>
+    <div id="chatPage" class="chat-container hidden">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="user-info">
+                    <div class="user-avatar" id="myAvatar">U</div>
+                    <div class="user-details">
+                        <div class="user-name" id="myName">用户</div>
+                        <div class="user-uid" id="myUid">UID</div>
+                    </div>
+                    <button class="logout-btn" onclick="logout()">退出</button>
+                </div>
+                <div class="sidebar-tabs">
+                    <button class="sidebar-tab active" onclick="switchSidebar('friends')">好友</button>
+                    <button class="sidebar-tab" onclick="switchSidebar('requests')">请求</button>
+                    <button class="sidebar-tab" onclick="openAddFriendModal()">+添加</button>
+                </div>
+            </div>
+            <div class="search-box">
+                <input type="text" class="search-input" id="searchInput" placeholder="搜索用户..." onkeypress="if(event.key==='Enter')searchUser()">
+            </div>
+            <div class="list-container">
+                <div id="friendsList"></div>
+                <div id="requestsList" class="hidden"></div>
             </div>
         </div>
-        <div class="chat-messages" id="chat-messages"></div>
-        <div class="chat-input">
-            <input type="text" class="room-input" id="room-input" placeholder="房间名" value="default">
-            <input type="text" class="message-input" id="message-input" placeholder="输入消息..." disabled>
-            <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>发送</button>
+
+        <div class="chat-main">
+            <div class="chat-header">
+                <div class="chat-title" id="chatTitle">选择好友开始聊天</div>
+            </div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-area">
+                <input type="text" class="chat-input" id="messageInput" placeholder="输入消息..." onkeypress="if(event.key==='Enter')sendMessage()">
+                <button class="send-btn" onclick="sendMessage()">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="addFriendModal" class="add-friend-modal">
+        <div class="modal-content">
+            <div class="modal-title">添加好友</div>
+            <input type="text" class="modal-input" id="addFriendInput" placeholder="输入用户名搜索">
+            <button class="modal-btn confirm" onclick="searchUserForAdd()">搜索</button>
+            <div class="search-results" id="searchResults"></div>
+            <div class="modal-buttons" style="margin-top: 15px;">
+                <button class="modal-btn cancel" onclick="closeAddFriendModal()">关闭</button>
+            </div>
         </div>
     </div>
 
     <script>
         let currentUser = null;
         let token = null;
-        let socket = null;
+        let currentChatFriend = null;
+        let ws = null;
 
-        const authContainer = document.getElementById('auth-container');
-        const chatContainer = document.getElementById('chat-container');
-        const messageDiv = document.getElementById('message');
-        const chatMessages = document.getElementById('chat-messages');
-        const messageInput = document.getElementById('message-input');
-        const sendBtn = document.getElementById('send-btn');
-        const roomInput = document.getElementById('room-input');
-        const userDisplay = document.getElementById('user-display');
+        const API_BASE = '/api';
 
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                
-                if (tab.dataset.tab === 'login') {
-                    document.getElementById('login-form').style.display = 'block';
-                    document.getElementById('register-form').style.display = 'none';
-                } else {
-                    document.getElementById('login-form').style.display = 'none';
-                    document.getElementById('register-form').style.display = 'block';
-                }
-                hideMessage();
-            });
-        });
-
-        document.getElementById('login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = document.getElementById('login-username').value;
-            const password = document.getElementById('login-password').value;
-            
-            try {
-                const response = await fetch('/api/user/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ username, password })
-                });
-                
-                const data = await response.json();
-                
-                if (data.code === 0) {
-                    currentUser = data.data;
-                    token = data.data.token;
-                    showMessage('登录成功！', 'success');
-                    setTimeout(() => showChat(), 1000);
-                } else {
-                    showMessage(data.message, 'error');
-                }
-            } catch (error) {
-                showMessage('请求失败，请稍后重试', 'error');
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            if (tab === 'login') {
+                document.getElementById('loginForm').classList.remove('hidden');
+                document.getElementById('registerForm').classList.add('hidden');
+            } else {
+                document.getElementById('loginForm').classList.add('hidden');
+                document.getElementById('registerForm').classList.remove('hidden');
             }
-        });
-
-        document.getElementById('register-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = document.getElementById('register-username').value;
-            const nickname = document.getElementById('register-nickname').value;
-            const password = document.getElementById('register-password').value;
-            
-            try {
-                const response = await fetch('/api/user/register', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ username, nickname, password })
-                });
-                
-                const data = await response.json();
-                
-                if (data.code === 0) {
-                    currentUser = data.data;
-                    token = data.data.token;
-                    showMessage('注册成功！', 'success');
-                    setTimeout(() => showChat(), 1000);
-                } else {
-                    showMessage(data.message, 'error');
-                }
-            } catch (error) {
-                showMessage('请求失败，请稍后重试', 'error');
-            }
-        });
+        }
 
         function showMessage(text, type) {
-            messageDiv.textContent = text;
-            messageDiv.className = 'message ' + type;
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.className = 'message ' + type + ' show';
+            setTimeout(() => msg.classList.remove('show'), 3000);
         }
 
-        function hideMessage() {
-            messageDiv.style.display = 'none';
+        async function register() {
+            const username = document.getElementById('regUsername').value;
+            const nickname = document.getElementById('regNickname').value;
+            const password = document.getElementById('regPassword').value;
+
+            if (!username || !nickname || !password) {
+                showMessage('请填写完整信息', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(API_BASE + '/user/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, nickname, password })
+                });
+                const data = await res.json();
+                if (data.code === 0) {
+                    showMessage('注册成功，请登录', 'success');
+                    switchTab('login');
+                } else {
+                    showMessage(data.message || '注册失败', 'error');
+                }
+            } catch (e) {
+                showMessage('网络错误', 'error');
+            }
         }
 
-        function showChat() {
-            authContainer.style.display = 'none';
-            chatContainer.style.display = 'block';
-            userDisplay.textContent = currentUser.nickname;
+        async function login() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            if (!username || !password) {
+                showMessage('请填写用户名和密码', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(API_BASE + '/user/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (data.code === 0) {
+                    currentUser = data.data;
+                    token = data.data.token;
+                    localStorage.setItem('token', token);
+                    localStorage.setItem('user', JSON.stringify(currentUser));
+                    showChatPage();
+                } else {
+                    showMessage(data.message || '登录失败', 'error');
+                }
+            } catch (e) {
+                showMessage('网络错误', 'error');
+            }
+        }
+
+        function logout() {
+            currentUser = null;
+            token = null;
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            if (ws) ws.close();
+            document.getElementById('authPage').classList.remove('hidden');
+            document.getElementById('chatPage').classList.add('hidden');
+        }
+
+        function showChatPage() {
+            document.getElementById('authPage').classList.add('hidden');
+            document.getElementById('chatPage').classList.remove('hidden');
+            document.getElementById('myAvatar').textContent = currentUser.nickname.charAt(0);
+            document.getElementById('myName').textContent = currentUser.nickname;
+            document.getElementById('myUid').textContent = 'UID: ' + currentUser.uid;
+            loadFriends();
+            loadFriendRequests();
             connectWebSocket();
         }
 
         function connectWebSocket() {
-            const room = roomInput.value || 'default';
-            const wsUrl = `ws://localhost:8080/room?room=${encodeURIComponent(room)}&token=${encodeURIComponent(token)}`;
+            if (!token) {
+                console.warn('No token available, skipping WebSocket connection');
+                return;
+            }
             
-            socket = new WebSocket(wsUrl);
+            console.log('Connecting WebSocket with token:', token.substring(0, 20) + '...');
+            const wsUrl = 'ws://localhost:8080/room?room=default&token=' + encodeURIComponent(token);
+            ws = new WebSocket(wsUrl);
             
-            socket.onopen = function() {
-                addSystemMessage(`已连接到房间: ${room}`);
-                messageInput.disabled = false;
-                sendBtn.disabled = false;
+            ws.onopen = function() {
+                console.log('✅ WebSocket connected successfully');
             };
             
-            socket.onmessage = function(event) {
+            ws.onmessage = function(event) {
+                console.log('📨 Received WebSocket message:', event.data);
                 try {
                     const msg = JSON.parse(event.data);
-                    addMessage(msg);
+                    handleWebSocketMessage(msg);
                 } catch (e) {
-                    addSystemMessage(event.data);
+                    console.log('Received plain message:', event.data);
                 }
             };
             
-            socket.onclose = function() {
-                addSystemMessage('连接已断开');
-                messageInput.disabled = true;
-                sendBtn.disabled = true;
+            ws.onclose = function(event) {
+                console.log('🔌 WebSocket disconnected, code:', event.code, 'reason:', event.reason);
+                console.log('Reconnecting in 3 seconds...');
+                setTimeout(connectWebSocket, 3000);
             };
             
-            socket.onerror = function(error) {
-                addSystemMessage('连接错误');
+            ws.onerror = function(error) {
+                console.error('❌ WebSocket error:', error);
             };
         }
 
-        function sendMessage() {
-            const content = messageInput.value.trim();
-            if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
-            
-            const msg = {
-                type: 1,
-                content: content
-            };
-            
-            socket.send(JSON.stringify(msg));
-            messageInput.value = '';
-        }
-
-        messageInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                sendMessage();
+        function handleWebSocketMessage(msg) {
+            if (msg.type === 'private_message') {
+                if (currentChatFriend && currentChatFriend.friend_uid === msg.from_uid) {
+                    addMessageToChat(msg);
+                } else {
+                    alert('收到来自 ' + (msg.from_nickname || msg.from_username) + ' 的新消息！');
+                    loadFriends();
+                }
             }
-        });
+        }
 
-        roomInput.addEventListener('change', function() {
-            if (socket) {
-                socket.close();
+        function addMessageToChat(msg) {
+            const container = document.getElementById('chatMessages');
+            const isSelf = msg.from_uid === currentUser.uid;
+            const messageHTML = `
+                <div class="message-bubble ${isSelf ? 'self' : ''}">
+                    <div class="message-content">
+                        <div class="message-sender">${isSelf ? '我' : msg.from_nickname || msg.from_username}</div>
+                        <div class="message-text">${msg.content}</div>
+                        <div class="message-time">${new Date(msg.send_time).toLocaleString()}</div>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', messageHTML);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function switchSidebar(tab) {
+            document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            if (tab === 'friends') {
+                document.getElementById('friendsList').classList.remove('hidden');
+                document.getElementById('requestsList').classList.add('hidden');
+            } else if (tab === 'requests') {
+                document.getElementById('friendsList').classList.add('hidden');
+                document.getElementById('requestsList').classList.remove('hidden');
             }
-            chatMessages.innerHTML = '';
-            connectWebSocket();
-        });
-
-        function addMessage(msg) {
-            const isOwn = msg.from_uid === currentUser.uid;
-            const div = document.createElement('div');
-            div.className = 'chat-message' + (isOwn ? ' own' : '');
-            
-            const bubble = document.createElement('div');
-            bubble.className = 'message-bubble';
-            bubble.textContent = msg.content;
-            
-            const meta = document.createElement('div');
-            meta.className = 'message-meta';
-            const time = new Date(msg.send_time * 1000).toLocaleTimeString();
-            meta.textContent = `${msg.from_username} · ${time}`;
-            
-            div.appendChild(bubble);
-            div.appendChild(meta);
-            chatMessages.appendChild(div);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        function addSystemMessage(text) {
-            const div = document.createElement('div');
-            div.className = 'system-message';
-            div.textContent = text;
-            chatMessages.appendChild(div);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        function logout() {
-            if (socket) {
-                socket.close();
+        async function loadFriends() {
+            try {
+                const res = await fetch(API_BASE + '/friend/list', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                if (data.code === 0 && data.data) {
+                    renderFriends(data.data);
+                }
+            } catch (e) {
+                console.error(e);
             }
-            currentUser = null;
-            token = null;
-            chatContainer.style.display = 'none';
-            authContainer.style.display = 'flex';
-            chatMessages.innerHTML = '';
-            document.getElementById('login-form').reset();
-            document.getElementById('register-form').reset();
-            hideMessage();
         }
+
+        function renderFriends(friends) {
+            const container = document.getElementById('friendsList');
+            if (friends.length === 0) {
+                container.innerHTML = '<div style="padding:20px;text-align:center;color:#888;">暂无好友，去添加吧</div>';
+                return;
+            }
+            container.innerHTML = friends.map(f => `
+                <div class="friend-item ${currentChatFriend && currentChatFriend.friend_uid === f.friend_uid ? 'active' : ''}" onclick="selectFriend('${f.friend_uid}', '${f.nickname || f.username}')">
+                    <div class="friend-avatar">${(f.nickname || f.username).charAt(0)}</div>
+                    <div class="friend-info">
+                        <div class="friend-name">${f.nickname || f.username}</div>
+                        <div class="friend-status">@${f.username}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadFriendRequests() {
+            try {
+                const res = await fetch(API_BASE + '/friend/requests', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                if (data.code === 0 && data.data) {
+                    renderRequests(data.data);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderRequests(requests) {
+            const container = document.getElementById('requestsList');
+            if (requests.length === 0) {
+                container.innerHTML = '<div style="padding:20px;text-align:center;color:#888;">暂无好友请求</div>';
+                return;
+            }
+            container.innerHTML = requests.map(r => `
+                <div class="request-item">
+                    <div class="friend-avatar">${(r.nickname || r.username).charAt(0)}</div>
+                    <div class="friend-info">
+                        <div class="friend-name">${r.nickname || r.username}</div>
+                        <div class="friend-status">请求添加你为好友</div>
+                    </div>
+                    <div class="request-buttons">
+                        <button class="accept-btn" onclick="acceptFriend('${r.uid}')">接受</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function acceptFriend(uid) {
+            try {
+                const res = await fetch(API_BASE + '/friend/accept', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token 
+                    },
+                    body: JSON.stringify({ friend_uid: uid })
+                });
+                const data = await res.json();
+                if (data.code === 0) {
+                    alert('已接受好友请求');
+                    loadFriends();
+                    loadFriendRequests();
+                } else {
+                    alert(data.message || '操作失败');
+                }
+            } catch (e) {
+                alert('网络错误');
+            }
+        }
+
+        function openAddFriendModal() {
+            document.getElementById('addFriendModal').classList.add('show');
+            document.getElementById('searchResults').innerHTML = '';
+        }
+
+        function closeAddFriendModal() {
+            document.getElementById('addFriendModal').classList.remove('show');
+        }
+
+        async function searchUser() {
+            const username = document.getElementById('searchInput').value.trim();
+            if (!username) return;
+            await searchUserInternal(username);
+        }
+
+        async function searchUserForAdd() {
+            const username = document.getElementById('addFriendInput').value.trim();
+            if (!username) return;
+            await searchUserInternal(username, true);
+        }
+
+        async function searchUserInternal(username, showModal = false) {
+            try {
+                const res = await fetch(API_BASE + '/friend/search', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token 
+                    },
+                    body: JSON.stringify({ username })
+                });
+                const data = await res.json();
+                if (data.code === 0 && data.data) {
+                    if (showModal) {
+                        renderSearchResults(data.data);
+                    } else {
+                        renderSearchResultsInList(data.data);
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderSearchResults(users) {
+            const container = document.getElementById('searchResults');
+            container.innerHTML = users.filter(u => u.uid !== currentUser.uid).map(u => `
+                <div class="search-result-item">
+                    <div>
+                        <strong>${u.nickname}</strong>
+                        <div style="font-size:12px;color:#888;">@${u.username}</div>
+                    </div>
+                    <button class="add-btn" onclick="addFriend('${u.uid}')">添加</button>
+                </div>
+            `).join('');
+        }
+
+        function renderSearchResultsInList(users) {
+            const container = document.getElementById('friendsList');
+            container.innerHTML = users.filter(u => u.uid !== currentUser.uid).map(u => `
+                <div class="friend-item">
+                    <div class="friend-avatar">${u.nickname.charAt(0)}</div>
+                    <div class="friend-info">
+                        <div class="friend-name">${u.nickname}</div>
+                        <div class="friend-status">@${u.username}</div>
+                    </div>
+                    <button class="add-btn" onclick="addFriend('${u.uid}')">添加</button>
+                </div>
+            `).join('');
+        }
+
+        async function addFriend(friendUid) {
+            try {
+                const res = await fetch(API_BASE + '/friend/add', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token 
+                    },
+                    body: JSON.stringify({ friend_uid: friendUid })
+                });
+                const data = await res.json();
+                if (data.code === 0) {
+                    alert('好友请求已发送');
+                    closeAddFriendModal();
+                } else {
+                    alert(data.message || '添加失败');
+                }
+            } catch (e) {
+                alert('网络错误');
+            }
+        }
+
+        async function selectFriend(uid, name) {
+            currentChatFriend = { friend_uid: uid, nickname: name };
+            document.getElementById('chatTitle').textContent = name;
+            document.querySelectorAll('.friend-item').forEach(el => el.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            await loadConversation(uid);
+        }
+
+        async function loadConversation(friendUid) {
+            try {
+                const res = await fetch(API_BASE + '/private/conversation?friend_uid=' + friendUid, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                if (data.code === 0 && data.data) {
+                    renderMessages(data.data);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderMessages(messages) {
+            const container = document.getElementById('chatMessages');
+            container.innerHTML = messages.map(m => {
+                const isSelf = m.from_uid === currentUser.uid;
+                return `
+                    <div class="message-bubble ${isSelf ? 'self' : ''}">
+                        <div class="message-content">
+                            <div class="message-sender">${isSelf ? '我' : currentChatFriend?.nickname || '对方'}</div>
+                            <div class="message-text">${m.content}</div>
+                            <div class="message-time">${new Date(m.send_time).toLocaleString()}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendMessage() {
+            if (!currentChatFriend) {
+                alert('请先选择好友');
+                return;
+            }
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+            if (!content) return;
+
+            try {
+                const res = await fetch(API_BASE + '/private/send', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token 
+                    },
+                    body: JSON.stringify({ to_uid: currentChatFriend.friend_uid, content })
+                });
+                const data = await res.json();
+                if (data.code === 0) {
+                    input.value = '';
+                    const selfMsg = {
+                        from_uid: currentUser.uid,
+                        from_nickname: currentUser.nickname,
+                        from_username: currentUser.username,
+                        content: content,
+                        send_time: Date.now()
+                    };
+                    addMessageToChat(selfMsg);
+                } else {
+                    alert(data.message || '发送失败');
+                }
+            } catch (e) {
+                alert('网络错误');
+            }
+        }
+
+        window.onload = function() {
+            const savedToken = localStorage.getItem('token');
+            const savedUser = localStorage.getItem('user');
+            if (savedToken && savedUser) {
+                token = savedToken;
+                currentUser = JSON.parse(savedUser);
+                showChatPage();
+            }
+        };
     </script>
 </body>
 </html>
