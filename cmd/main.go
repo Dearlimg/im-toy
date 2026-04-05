@@ -42,7 +42,14 @@ func main() {
 		log.Fatalf("Failed to init database: %v", err)
 	}
 
-	if err := database.DB.AutoMigrate(&entity.User{}, &entity.Friend{}, &entity.PrivateMessage{}); err != nil {
+	if err := database.DB.AutoMigrate(
+		&entity.User{},
+		&entity.Friend{},
+		&entity.PrivateMessage{},
+		&entity.Group{},
+		&entity.GroupMember{},
+		&entity.GroupMessage{},
+	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 

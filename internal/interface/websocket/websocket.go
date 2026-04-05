@@ -50,6 +50,7 @@ type WSMessage struct {
 	Type      string `json:"type"`
 	MsgID     string `json:"msg_id,omitempty"`
 	ToUID     string `json:"to_uid,omitempty"`
+	GroupID   string `json:"group_id,omitempty"`
 	Content   string `json:"content,omitempty"`
 	Timestamp int64  `json:"timestamp,omitempty"`
 }
@@ -148,6 +149,8 @@ func (c *Conn) readPump() {
 		switch wsMsg.Type {
 		case "private_message":
 			handlePrivateMessage(c, &wsMsg)
+		case "group_message":
+			handleGroupMessage(c, &wsMsg)
 		default:
 			handleRoomMessage(c, message)
 		}
@@ -231,6 +234,88 @@ func handlePrivateMessage(c *Conn, msg *WSMessage) {
 	log.Printf("Private message saved and sent: from=%s to=%s", c.UserID, msg.ToUID)
 }
 
+func handleGroupMessage(c *Conn, msg *WSMessage) {
+	if msg.GroupID == "" || msg.Content == "" {
+		log.Printf("Invalid group message: %+v", msg)
+		return
+	}
+
+	groupRepo := infra_repo.NewGroupRepository()
+	if _, err := groupRepo.FindMember(msg.GroupID, c.UserID); err != nil {
+		log.Printf("group message denied: not a member group=%s uid=%s", msg.GroupID, c.UserID)
+		return
+	}
+
+	msgID := idgen.GenerateMsgID()
+	sendTime := time.Now().UnixMilli()
+
+	newMsg := &entity.GroupMessage{
+		MsgID:    msgID,
+		GroupID:  msg.GroupID,
+		FromUID:  c.UserID,
+		Content:  msg.Content,
+		Type:     2,
+		SendTime: sendTime,
+	}
+
+	if err := groupRepo.CreateMessage(newMsg); err != nil {
+		log.Printf("Failed to save group message: %v", err)
+		return
+	}
+
+	var fromUser entity.User
+	if err := database.DB.Where("uid = ?", c.UserID).First(&fromUser).Error; err != nil {
+		fromUser.Username = "未知用户"
+		fromUser.Nickname = "未知用户"
+	}
+
+	wsPayload := map[string]interface{}{
+		"type":          "group_message",
+		"msg_id":        newMsg.MsgID,
+		"group_id":      msg.GroupID,
+		"from_uid":      c.UserID,
+		"from_username": fromUser.Username,
+		"from_nickname": fromUser.Nickname,
+		"content":       msg.Content,
+		"send_time":     sendTime,
+	}
+
+	msgBytes, err := json.Marshal(wsPayload)
+	if err != nil {
+		log.Printf("Failed to marshal group message: %v", err)
+		return
+	}
+
+	members, err := groupRepo.FindMembersByGroupID(msg.GroupID)
+	if err != nil {
+		log.Printf("Failed to list group members: %v", err)
+		return
+	}
+
+	for _, m := range members {
+		if m.UID == c.UserID {
+			continue
+		}
+		sendBytesToUser(m.UID, msgBytes)
+	}
+	log.Printf("Group message broadcast: group=%s from=%s members=%d", msg.GroupID, c.UserID, len(members))
+}
+
+func sendBytesToUser(uid string, msgBytes []byte) {
+	mu.Lock()
+	conn, exists := userConns[uid]
+	mu.Unlock()
+
+	if !exists || conn == nil || conn.Closed {
+		return
+	}
+	select {
+	case conn.SendChan <- msgBytes:
+	default:
+		log.Printf("send queue full for uid=%s", uid)
+	}
+}
+
 func (c *Conn) writePump() {
 	defer func() {
 		c.Conn.Close()
@@ -279,10 +364,10 @@ func SendPrivateMessage(toUID string, msg map[string]interface{}) {
 
 	mu.Lock()
 	conn, exists := userConns[toUID]
-	log.Printf("User %s exists in connections: %v, closed: %v", toUID, exists, exists && conn.Closed)
+	log.Printf("User %s exists in connections: %v, closed: %v", toUID, exists, exists && conn != nil && conn.Closed)
 	mu.Unlock()
 
-	if exists && !conn.Closed {
+	if exists && conn != nil && !conn.Closed {
 		select {
 		case conn.SendChan <- msgBytes:
 			log.Printf("✅ Private message sent to user: %s", toUID)
