@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strings"
 	"sync"
 
-	"github.com/IBM/sarama"
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/infra/database"
+
+	"github.com/IBM/sarama"
+	"gorm.io/gorm/clause"
 )
 
 type PersistConsumer struct {
@@ -134,6 +137,10 @@ func (h *persistHandler) persistGroupMessage(event *GroupMessageEvent) {
 	}
 
 	if err := database.DB.Create(msg).Error; err != nil {
+		if isDuplicateKeyError(err) {
+			log.Printf("Duplicate group message ignored: msg_id=%s", event.MsgID)
+			return
+		}
 		log.Printf("Failed to persist group message: %v", err)
 	} else {
 		log.Printf("Group message persisted: msg_id=%s, group_id=%s", event.MsgID, event.GroupID)
@@ -152,6 +159,10 @@ func (h *persistHandler) persistPrivateMessage(event *PrivateMessageEvent) {
 	}
 
 	if err := database.DB.Create(msg).Error; err != nil {
+		if isDuplicateKeyError(err) {
+			log.Printf("Duplicate private message ignored: msg_id=%s", event.MsgID)
+			return
+		}
 		log.Printf("Failed to persist private message: %v", err)
 	} else {
 		log.Printf("Private message persisted: msg_id=%s", event.MsgID)
@@ -165,7 +176,16 @@ func (h *persistHandler) persistReadEvent(event *ReadEvent) {
 		ReadTime: event.ReadTime,
 	}
 
-	if err := database.DB.Create(read).Error; err != nil {
+	err := database.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "msg_id"}, {Name: "uid"}},
+		DoNothing: true,
+	}).Create(read).Error
+
+	if err != nil {
 		log.Printf("Failed to persist read event: %v", err)
 	}
+}
+
+func isDuplicateKeyError(err error) bool {
+	return strings.Contains(err.Error(), "Duplicate entry")
 }

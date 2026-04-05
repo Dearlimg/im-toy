@@ -207,6 +207,15 @@ func (c *redisCache) IncrMsgLimit(uid string) (int64, error) {
 	return count, nil
 }
 
+func (c *redisCache) CheckAndSetIdempotentKey(uid, clientMsgID string) (bool, error) {
+	key := fmt.Sprintf("im:idempotent:%s:%s", uid, clientMsgID)
+	added, err := c.client.SetNX(ctx, key, "1", 24*time.Hour).Result()
+	if err != nil {
+		return false, err
+	}
+	return added, nil
+}
+
 func (c *redisCache) GetMsgLimit(uid string) (int64, error) {
 	key := fmt.Sprintf("im:limiter:msg:%s", uid)
 	val, err := c.client.Get(ctx, key).Result()

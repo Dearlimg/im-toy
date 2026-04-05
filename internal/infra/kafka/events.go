@@ -27,19 +27,21 @@ var (
 )
 
 type GroupMessageEvent struct {
-	MsgID    string `json:"msg_id"`
-	GroupID  string `json:"group_id"`
-	FromUID  string `json:"from_uid"`
-	Content  string `json:"content"`
-	SendTime int64  `json:"send_time"`
+	MsgID       string `json:"msg_id"`
+	ClientMsgID string `json:"client_msg_id,omitempty"`
+	GroupID     string `json:"group_id"`
+	FromUID     string `json:"from_uid"`
+	Content     string `json:"content"`
+	SendTime    int64  `json:"send_time"`
 }
 
 type PrivateMessageEvent struct {
-	MsgID    string `json:"msg_id"`
-	FromUID  string `json:"from_uid"`
-	ToUID    string `json:"to_uid"`
-	Content  string `json:"content"`
-	SendTime int64  `json:"send_time"`
+	MsgID       string `json:"msg_id"`
+	ClientMsgID string `json:"client_msg_id,omitempty"`
+	FromUID     string `json:"from_uid"`
+	ToUID       string `json:"to_uid"`
+	Content     string `json:"content"`
+	SendTime    int64  `json:"send_time"`
 }
 
 type ReadEvent struct {

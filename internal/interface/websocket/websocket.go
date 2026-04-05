@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -87,13 +88,14 @@ type Message struct {
 }
 
 type WSMessage struct {
-	Type    string `json:"type"`
-	MsgID   string `json:"msg_id,omitempty"`
-	FromUID string `json:"from_uid,omitempty"`
-	ToUID   string `json:"to_uid,omitempty"`
-	RoomID  string `json:"room_id,omitempty"`
-	GroupID string `json:"group_id,omitempty"`
-	Content string `json:"content,omitempty"`
+	Type        string `json:"type"`
+	MsgID       string `json:"msg_id,omitempty"`
+	ClientMsgID string `json:"client_msg_id,omitempty"`
+	FromUID     string `json:"from_uid,omitempty"`
+	ToUID       string `json:"to_uid,omitempty"`
+	RoomID      string `json:"room_id,omitempty"`
+	GroupID     string `json:"group_id,omitempty"`
+	Content     string `json:"content,omitempty"`
 
 	MsgIDs []string `json:"msg_ids,omitempty"`
 
@@ -274,22 +276,34 @@ func handlePrivateMessage(c *Conn, msg *WSMessage) {
 		}
 	}
 
-	msgID := idgen.Gen.NextUID()
+	if msg.ClientMsgID == "" {
+		msg.ClientMsgID = fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+
+	if redis.Cache != nil {
+		added, _ := redis.Cache.CheckAndSetIdempotentKey(c.UserID, msg.ClientMsgID)
+		if !added {
+			return
+		}
+	}
+
+	msg.MsgID = idgen.Gen.NextUID()
 	sendTime := time.Now().UnixMilli()
 
 	event := kafka.PrivateMessageEvent{
-		MsgID:    msgID,
-		FromUID:  c.UserID,
-		ToUID:    msg.ToUID,
-		Content:  msg.Content,
-		SendTime: sendTime,
+		MsgID:       msg.MsgID,
+		ClientMsgID: msg.ClientMsgID,
+		FromUID:     c.UserID,
+		ToUID:       msg.ToUID,
+		Content:     msg.Content,
+		SendTime:    sendTime,
 	}
 
 	kafka.Publish(kafka.TopicPrivateMsg, msg.ToUID, &event)
 
 	wsMsg := map[string]interface{}{
 		"type":      "private_message",
-		"msg_id":    msgID,
+		"msg_id":    msg.MsgID,
 		"from_uid":  c.UserID,
 		"to_uid":    msg.ToUID,
 		"content":   msg.Content,
@@ -317,15 +331,27 @@ func handleGroupMessage(c *Conn, msg *WSMessage) {
 		return
 	}
 
-	msgID := idgen.Gen.NextUID()
+	if msg.ClientMsgID == "" {
+		msg.ClientMsgID = fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+
+	if redis.Cache != nil {
+		added, _ := redis.Cache.CheckAndSetIdempotentKey(c.UserID, msg.ClientMsgID)
+		if !added {
+			return
+		}
+	}
+
+	msg.MsgID = idgen.Gen.NextUID()
 	sendTime := time.Now().UnixMilli()
 
 	event := kafka.GroupMessageEvent{
-		MsgID:    msgID,
-		GroupID:  msg.GroupID,
-		FromUID:  c.UserID,
-		Content:  msg.Content,
-		SendTime: sendTime,
+		MsgID:       msg.MsgID,
+		ClientMsgID: msg.ClientMsgID,
+		GroupID:     msg.GroupID,
+		FromUID:     c.UserID,
+		Content:     msg.Content,
+		SendTime:    sendTime,
 	}
 
 	kafka.Publish(kafka.TopicGroupMsgRaw, msg.GroupID, &event)
@@ -333,7 +359,7 @@ func handleGroupMessage(c *Conn, msg *WSMessage) {
 
 	wsPayload := map[string]interface{}{
 		"type":      "group_message",
-		"msg_id":    msgID,
+		"msg_id":    msg.MsgID,
 		"group_id":  msg.GroupID,
 		"from_uid":  c.UserID,
 		"content":   msg.Content,

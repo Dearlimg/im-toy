@@ -881,6 +881,7 @@
       if (currentChatGroup) {
         ws.send(JSON.stringify({
           type: 'group_message',
+          client_msg_id: Date.now() + Math.random().toString(36).substr(2, 9),
           group_id: currentChatGroup.group_id,
           content: content,
           timestamp: Date.now()
@@ -890,6 +891,7 @@
       }
       ws.send(JSON.stringify({
         type: 'private_message',
+        client_msg_id: Date.now() + Math.random().toString(36).substr(2, 9),
         to_uid: currentChatFriend.friend_uid,
         content: content,
         timestamp: Date.now()
