@@ -29,4 +29,6 @@ type GroupMessageResp struct {
 	FromNickname string `json:"from_nickname"`
 	Content      string `json:"content"`
 	SendTime     int64  `json:"send_time"`
+	ReadCount    int64  `json:"read_count,omitempty"`
+	TotalCount   int    `json:"total_count,omitempty"`
 }

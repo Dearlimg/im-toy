@@ -615,12 +615,9 @@
     async function loadGroupHistory(groupId) {
       const box = document.getElementById('chatMessages');
       try {
-        const [readStatus, res] = await Promise.all([
-          getRoomReadStatus(groupId),
-          fetch(API + '/group/messages?group_id=' + encodeURIComponent(groupId) + '&limit=50', {
-            headers: { 'Authorization': 'Bearer ' + token }
-          })
-        ]);
+        const res = await fetch(API + '/group/messages?group_id=' + encodeURIComponent(groupId) + '&limit=50', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
         const j = await res.json();
         if (j.code !== 0) {
           box.textContent = j.message || '加载失败';
@@ -629,20 +626,32 @@
         const msgs = j.data || [];
         
         if (msgs.length > 0) {
-          const lastMsg = msgs[msgs.length - 1];
-          reportRead(groupId, lastMsg.msg_id, groupId);
+          const unreadMsgIds = msgs.filter(m => m.from_uid !== currentUser.uid).map(m => m.msg_id);
+          if (unreadMsgIds.length > 0) {
+            reportGroupRead(groupId, unreadMsgIds);
+          }
         }
 
         box.innerHTML = msgs.map(m => {
           const self = m.from_uid === currentUser.uid;
           const who = self ? '我' : (m.from_nickname || m.from_username || m.from_uid);
-          const isRead = !readStatus || !readStatus.last_read_msg_id || m.msg_id <= readStatus.last_read_msg_id;
-          return renderMsgLine(self, m.content, m.send_time, who, m.is_read || isRead, m.msg_id);
+          return renderMsgLine(self, m.content, m.send_time, who, false, m.msg_id, m.read_count, m.total_count);
         }).join('');
         box.scrollTop = box.scrollHeight;
       } catch (e) {
         box.textContent = '网络错误';
       }
+    }
+
+    function reportGroupRead(groupId, msgIds) {
+      if (!ws || ws.readyState !== WebSocket.OPEN || msgIds.length === 0) return;
+      ws.send(JSON.stringify({
+        type: 'group_read_receipt',
+        group_id: groupId,
+        msg_ids: msgIds
+      }));
+      unreadCounts[groupId] = 0;
+      loadGroups();
     }
 
     function openCreateGroupModal() {
@@ -685,13 +694,17 @@
       }
     }
 
-    function renderMsgLine(self, content, sendTime, whoLabel, isRead, msgId) {
+    function renderMsgLine(self, content, sendTime, whoLabel, isRead, msgId, readCount, totalCount) {
       const t = typeof sendTime === 'number' ? sendTime : parseInt(sendTime, 10);
       const d = new Date(t);
       const timeStr = isNaN(d.getTime()) ? String(sendTime) : d.toLocaleString();
       let readStatusHtml = '';
       if (self) {
-        readStatusHtml = `<div class="read-status ${isRead ? '' : 'unread'}">${isRead ? '已读' : '未读'}</div>`;
+        if (readCount !== undefined && totalCount !== undefined) {
+          readStatusHtml = `<div class="read-status">${readCount}人已读 / ${totalCount}人</div>`;
+        } else {
+          readStatusHtml = `<div class="read-status ${isRead ? '' : 'unread'}">${isRead ? '已读' : '未读'}</div>`;
+        }
       }
       return `<div class="msg ${self ? 'self' : ''}" data-msg-id="${esc(msgId || '')}"><div class="meta">${esc(whoLabel)} · ${esc(timeStr)}</div><div>${esc(content)}</div>${readStatusHtml}</div>`;
     }
@@ -723,6 +736,10 @@
         updateMessageReadStatus(msg.msg_id, true);
         return;
       }
+      if (msg.type === 'group_read_receipt') {
+        updateGroupMessageReadStatus(msg.msg_id, msg.read_count, msg.total_count);
+        return;
+      }
       if (msg.type === 'private_message') {
         const isSelf = msg.from_uid === currentUser.uid;
         if (isSelf) {
@@ -742,10 +759,16 @@
         return;
       }
       if (msg.type === 'group_message') {
+        const self = msg.from_uid === currentUser.uid;
+        if (self) {
+          if (currentChatGroup && currentChatGroup.group_id === msg.group_id) {
+            appendChatLine(true, msg.content, msg.send_time, '我', false, msg.msg_id, 1, msg.total_count || 0);
+          }
+          return;
+        }
         if (currentChatGroup && currentChatGroup.group_id === msg.group_id) {
-          const self = msg.from_uid === currentUser.uid;
-          const who = self ? '我' : (msg.from_nickname || msg.from_username || msg.from_uid);
-          appendChatLine(self, msg.content, msg.send_time, who, true, msg.msg_id);
+          const who = msg.from_nickname || msg.from_username || msg.from_uid;
+          appendChatLine(false, msg.content, msg.send_time, who, true, msg.msg_id);
         } else {
           unreadCounts[msg.group_id] = (unreadCounts[msg.group_id] || 0) + 1;
           alert('群消息: ' + (msg.group_id || ''));
@@ -772,9 +795,30 @@
       });
     }
 
-    function appendChatLine(self, content, sendTime, whoLabel, isRead, msgId) {
+    function updateGroupMessageReadStatus(msgId, readCount, totalCount) {
+      const allMsgs = document.querySelectorAll('.msg[data-msg-id]');
+      for (let i = 0; i < allMsgs.length; i++) {
+        const msgEl = allMsgs[i];
+        const currentMsgId = msgEl.getAttribute('data-msg-id');
+        if (currentMsgId === msgId) {
+          const readStatusEl = msgEl.querySelector('.read-status');
+          if (readStatusEl) {
+            msgEl.style.transition = 'all 0.3s ease';
+            msgEl.style.backgroundColor = '#f0f9ff';
+            setTimeout(() => {
+              msgEl.style.backgroundColor = '';
+            }, 500);
+            readStatusEl.textContent = `${readCount}人已读 / ${totalCount}人`;
+            readStatusEl.classList.remove('unread');
+          }
+          break;
+        }
+      }
+    }
+
+    function appendChatLine(self, content, sendTime, whoLabel, isRead, msgId, readCount, totalCount) {
       const box = document.getElementById('chatMessages');
-      box.insertAdjacentHTML('beforeend', renderMsgLine(self, content, sendTime, whoLabel, isRead, msgId));
+      box.insertAdjacentHTML('beforeend', renderMsgLine(self, content, sendTime, whoLabel, isRead, msgId, readCount, totalCount));
       box.scrollTop = box.scrollHeight;
     }
 
@@ -797,7 +841,6 @@
           content: content,
           timestamp: Date.now()
         }));
-        appendChatLine(true, content, Date.now(), '我', true, '');
         input.value = '';
         return;
       }

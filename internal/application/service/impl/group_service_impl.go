@@ -8,6 +8,7 @@ import (
 	"im-chat/internal/domain/repository"
 	"im-chat/internal/infra/database"
 	"im-chat/internal/infra/idgen"
+	infra_repo "im-chat/internal/infra/repository"
 )
 
 type GroupServiceImpl struct {
@@ -140,6 +141,12 @@ func (s *GroupServiceImpl) GetGroupMessages(currentUID, groupID string, limit in
 		return nil, errors.New("获取群消息失败")
 	}
 
+	members, err := s.groupRepo.FindMembersByGroupID(groupID)
+	if err != nil {
+		return nil, errors.New("获取群成员失败")
+	}
+	totalCount := len(members)
+
 	var uids []string
 	for _, m := range messages {
 		uids = append(uids, m.FromUID)
@@ -155,10 +162,13 @@ func (s *GroupServiceImpl) GetGroupMessages(currentUID, groupID string, limit in
 		userMap[u.UID] = u
 	}
 
+	readRepo := infra_repo.NewMessageReadRepository()
+
 	var resp []*dto.GroupMessageResp
 	for i := len(messages) - 1; i >= 0; i-- {
 		m := messages[i]
 		if user, ok := userMap[m.FromUID]; ok {
+			readCount, _ := readRepo.GetReadCount(m.MsgID)
 			resp = append(resp, &dto.GroupMessageResp{
 				MsgID:        m.MsgID,
 				GroupID:      m.GroupID,
@@ -167,6 +177,8 @@ func (s *GroupServiceImpl) GetGroupMessages(currentUID, groupID string, limit in
 				FromNickname: user.Nickname,
 				Content:      m.Content,
 				SendTime:     m.SendTime,
+				ReadCount:    readCount,
+				TotalCount:   totalCount,
 			})
 		}
 	}

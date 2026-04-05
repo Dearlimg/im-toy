@@ -47,14 +47,15 @@ type Message struct {
 }
 
 type WSMessage struct {
-	Type      string `json:"type"`
-	MsgID     string `json:"msg_id,omitempty"`
-	FromUID   string `json:"from_uid,omitempty"`
-	ToUID     string `json:"to_uid,omitempty"`
-	RoomID    string `json:"room_id,omitempty"`
-	GroupID   string `json:"group_id,omitempty"`
-	Content   string `json:"content,omitempty"`
-	Timestamp int64  `json:"timestamp,omitempty"`
+	Type      string   `json:"type"`
+	MsgID     string   `json:"msg_id,omitempty"`
+	FromUID   string   `json:"from_uid,omitempty"`
+	ToUID     string   `json:"to_uid,omitempty"`
+	RoomID    string   `json:"room_id,omitempty"`
+	GroupID   string   `json:"group_id,omitempty"`
+	Content   string   `json:"content,omitempty"`
+	MsgIDs    []string `json:"msg_ids,omitempty"`
+	Timestamp int64    `json:"timestamp,omitempty"`
 }
 
 func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
@@ -155,6 +156,8 @@ func (c *Conn) readPump() {
 			handleGroupMessage(c, &wsMsg)
 		case "read_receipt":
 			handleReadReceipt(c, &wsMsg)
+		case "group_read_receipt":
+			handleGroupReadReceipt(c, &wsMsg)
 		default:
 			handleRoomMessage(c, message)
 		}
@@ -198,6 +201,57 @@ func handleReadReceipt(c *Conn, msg *WSMessage) {
 		receiptBytes, _ := json.Marshal(receipt)
 		log.Printf("Pushing read receipt to sender: %s", targetMsg.FromUID)
 		BroadcastToUser(targetMsg.FromUID, receiptBytes)
+	}
+}
+
+func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
+	if msg.GroupID == "" || len(msg.MsgIDs) == 0 {
+		log.Printf("Invalid group read receipt: %+v", msg)
+		return
+	}
+
+	log.Printf("Received group read receipt from %s for group: %s, count: %d", c.Username, msg.GroupID, len(msg.MsgIDs))
+
+	readTime := time.Now().UnixMilli()
+	readRepo := infra_repo.NewMessageReadRepository()
+	groupRepo := infra_repo.NewGroupRepository()
+
+	messageReads := make([]*entity.MessageRead, 0, len(msg.MsgIDs))
+	for _, msgID := range msg.MsgIDs {
+		messageReads = append(messageReads, &entity.MessageRead{
+			MsgID:    msgID,
+			UID:      c.UserID,
+			ReadTime: readTime,
+		})
+	}
+
+	if err := readRepo.BatchCreate(messageReads); err != nil {
+		log.Printf("Failed to batch create group read receipt: %v", err)
+	}
+
+	members, err := groupRepo.FindMembersByGroupID(msg.GroupID)
+	if err != nil {
+		log.Printf("Failed to get group members: %v", err)
+	}
+	totalCount := len(members)
+
+	for _, msgID := range msg.MsgIDs {
+		readCount, _ := readRepo.GetReadCount(msgID)
+
+		var groupMsg entity.GroupMessage
+		if err := database.DB.Where("msg_id = ?", msgID).First(&groupMsg).Error; err == nil && groupMsg.FromUID != c.UserID {
+			receipt := map[string]interface{}{
+				"type":        "group_read_receipt",
+				"group_id":    msg.GroupID,
+				"msg_id":      msgID,
+				"read_uid":    c.UserID,
+				"read_count":  readCount,
+				"total_count": totalCount,
+				"read_time":   readTime,
+			}
+			receiptBytes, _ := json.Marshal(receipt)
+			BroadcastToUser(groupMsg.FromUID, receiptBytes)
+		}
 	}
 }
 
@@ -314,6 +368,13 @@ func handleGroupMessage(c *Conn, msg *WSMessage) {
 		fromUser.Nickname = "未知用户"
 	}
 
+	members, err := groupRepo.FindMembersByGroupID(msg.GroupID)
+	if err != nil {
+		log.Printf("Failed to list group members: %v", err)
+		return
+	}
+	totalCount := len(members)
+
 	wsPayload := map[string]interface{}{
 		"type":          "group_message",
 		"msg_id":        newMsg.MsgID,
@@ -323,6 +384,7 @@ func handleGroupMessage(c *Conn, msg *WSMessage) {
 		"from_nickname": fromUser.Nickname,
 		"content":       msg.Content,
 		"send_time":     sendTime,
+		"total_count":   totalCount,
 	}
 
 	msgBytes, err := json.Marshal(wsPayload)
@@ -331,16 +393,7 @@ func handleGroupMessage(c *Conn, msg *WSMessage) {
 		return
 	}
 
-	members, err := groupRepo.FindMembersByGroupID(msg.GroupID)
-	if err != nil {
-		log.Printf("Failed to list group members: %v", err)
-		return
-	}
-
 	for _, m := range members {
-		if m.UID == c.UserID {
-			continue
-		}
 		sendBytesToUser(m.UID, msgBytes)
 	}
 	log.Printf("Group message broadcast: group=%s from=%s members=%d", msg.GroupID, c.UserID, len(members))
