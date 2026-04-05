@@ -16,6 +16,8 @@ var (
 )
 
 func RegisterRoutes(r *gin.Engine) {
+	r.Use(middleware.Recovery())
+
 	r.StaticFS("/public", http.Dir("public"))
 
 	r.GET("/", func(c *gin.Context) {
@@ -43,4 +45,7 @@ func RegisterRoutes(r *gin.Engine) {
 		auth.GET("/private/unread", privateMsgHandler.GetUnreadCount)
 		auth.POST("/private/mark-read", privateMsgHandler.MarkAsRead)
 	}
+
+	r.NoRoute(middleware.NoRoute())
+	r.NoMethod(middleware.NoMethod())
 }
