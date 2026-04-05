@@ -1,0 +1,45 @@
+services:
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    container_name: redis
+    volumes:
+      - ./components/redis/data:/data
+    environment:
+      TZ: Asia/Shanghai
+    restart: always
+    command: redis-server --requirepass sta_go --appendonly yes
+
+  mysql:
+    image: mysql:latest
+    ports:
+      - "3307:3306"
+    container_name: mysql
+    volumes:
+      - ./components/mysql/data:/var/lib/mysql
+      - /etc/localtime:/etc/localtime
+    environment:
+      MYSQL_ROOT_PASSWORD: sta_go
+      TZ: Asia/Shanghai
+    restart: always
+
+  kafka:
+    image: 'wurstmeister/kafka:2.13-2.8.1'
+    ports:
+      - "9092:9092"
+    container_name: kafka
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: 121.40.235.227
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_PORT: 9092
+    restart: always
+    depends_on:
+      - zookeeper
+
+  zookeeper:
+    image: 'wurstmeister/zookeeper:latest'
+    ports:
+      - "2181:2181"
+    container_name: zookeeper
+    restart: always
