@@ -755,25 +755,21 @@
 
     function updateMessageReadStatus(msgId, isRead) {
       const allMsgs = document.querySelectorAll('.msg[data-msg-id]');
-      let msgEl = null;
-      for (let i = 0; i < allMsgs.length; i++) {
-        if (allMsgs[i].getAttribute('data-msg-id') === msgId) {
-          msgEl = allMsgs[i];
-          break;
+      Array.from(allMsgs).forEach((msgEl, i) => {
+        const currentMsgId = msgEl.getAttribute('data-msg-id');
+        if (currentMsgId && currentMsgId <= msgId) {
+          const readStatusEl = msgEl.querySelector('.read-status');
+          if (readStatusEl) {
+            msgEl.style.transition = 'all 0.3s ease';
+            msgEl.style.backgroundColor = '#f0f9ff';
+            setTimeout(() => {
+              msgEl.style.backgroundColor = '';
+            }, 500 + i * 50);
+            readStatusEl.textContent = isRead ? '已读' : '未读';
+            readStatusEl.classList.toggle('unread', !isRead);
+          }
         }
-      }
-      if (msgEl) {
-        const readStatusEl = msgEl.querySelector('.read-status');
-        if (readStatusEl) {
-          msgEl.style.transition = 'all 0.3s ease';
-          msgEl.style.backgroundColor = '#f0f9ff';
-          setTimeout(() => {
-            msgEl.style.backgroundColor = '';
-          }, 500);
-          readStatusEl.textContent = isRead ? '已读' : '未读';
-          readStatusEl.classList.toggle('unread', !isRead);
-        }
-      }
+      });
     }
 
     function appendChatLine(self, content, sendTime, whoLabel, isRead, msgId) {
