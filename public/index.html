@@ -650,6 +650,11 @@
         group_id: groupId,
         msg_ids: msgIds
       }));
+      ws.send(JSON.stringify({
+        type: 'read_receipt',
+        msg_id: msgIds[msgIds.length - 1],
+        room_id: groupId
+      }));
       unreadCounts[groupId] = 0;
       loadGroups();
     }
@@ -701,7 +706,7 @@
       let readStatusHtml = '';
       if (self) {
         if (readCount !== undefined && totalCount !== undefined) {
-          readStatusHtml = `<div class="read-status">${readCount}人已读 / ${totalCount - 1}人</div>`;
+          readStatusHtml = `<div class="read-status">${readCount}人已读 / ${totalCount}人</div>`;
         } else {
           readStatusHtml = `<div class="read-status ${isRead ? '' : 'unread'}">${isRead ? '已读' : '未读'}</div>`;
         }
@@ -806,6 +811,7 @@
         if (self) {
           if (currentChatGroup && currentChatGroup.group_id === msg.group_id) {
             appendChatLine(true, msg.content, msg.send_time, '我', false, msg.msg_id, 1, msg.total_count || 0);
+            reportGroupRead(msg.group_id, [msg.msg_id]);
           }
           return;
         }
@@ -852,7 +858,7 @@
             setTimeout(() => {
               msgEl.style.backgroundColor = '';
             }, 500);
-            readStatusEl.textContent = `${readCount}人已读 / ${totalCount - 1}人`;
+            readStatusEl.textContent = `${readCount}人已读 / ${totalCount}人`;
             readStatusEl.classList.remove('unread');
           }
           break;
