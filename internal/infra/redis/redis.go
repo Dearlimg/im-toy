@@ -32,6 +32,7 @@ func InitRedis(cfg *config.RedisConfig) error {
 	}
 
 	Cache = newRedisCache(RDB)
+	StartReadStatusFlusher(Cache)
 	log.Println("Redis connected successfully")
 	return nil
 }

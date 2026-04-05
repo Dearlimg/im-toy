@@ -417,24 +417,18 @@ func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
 	}
 
 	readTime := time.Now().UnixMilli()
-	readRepo := infra_repo.NewMessageReadRepository()
 	groupRepo := infra_repo.NewGroupRepository()
+	cache := redis.GetCache()
 
-	messageReads := make([]*entity.MessageRead, 0, len(msg.MsgIDs))
 	for _, msgID := range msg.MsgIDs {
-		messageReads = append(messageReads, &entity.MessageRead{
-			MsgID:    msgID,
-			UID:      c.UserID,
-			ReadTime: readTime,
-		})
+		cache.AddMsgRead(msgID, c.UserID)
+		cache.AddMsgReadPending(msgID, readTime)
 	}
-
-	readRepo.BatchCreate(messageReads)
 
 	members, _ := groupRepo.FindMembersByGroupID(msg.GroupID)
 	totalCount := len(members)
 
-	readCountMap, _ := readRepo.BatchGetReadCount(msg.MsgIDs)
+	readCountMap, _ := redis.BatchGetMsgReadCount(msg.MsgIDs)
 	msgMap := make(map[string]*entity.GroupMessage)
 	if len(msg.MsgIDs) > 0 {
 		messages, _ := groupRepo.FindMessagesByMsgIDs(msg.MsgIDs)

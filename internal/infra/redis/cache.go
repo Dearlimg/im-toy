@@ -219,6 +219,74 @@ func (c *redisCache) GetMsgLimit(uid string) (int64, error) {
 	return strconv.ParseInt(val, 10, 64)
 }
 
+func (c *redisCache) AddMsgRead(msgID, uid string) error {
+	key := fmt.Sprintf("im:msg:read:%s", msgID)
+	return c.client.SAdd(ctx, key, uid).Err()
+}
+
+func (c *redisCache) GetMsgReadCount(msgID string) (int64, error) {
+	key := fmt.Sprintf("im:msg:read:%s", msgID)
+	return c.client.SCard(ctx, key).Result()
+}
+
+func (c *redisCache) BatchGetMsgReadCount(msgIDs []string) (map[string]int64, error) {
+	if len(msgIDs) == 0 {
+		return make(map[string]int64), nil
+	}
+	pipe := c.client.Pipeline()
+	cmds := make(map[string]*redis.IntCmd)
+	for _, msgID := range msgIDs {
+		key := fmt.Sprintf("im:msg:read:%s", msgID)
+		cmds[msgID] = pipe.SCard(ctx, key)
+	}
+	_, err := pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+	result := make(map[string]int64)
+	for msgID, cmd := range cmds {
+		result[msgID], _ = cmd.Result()
+	}
+	return result, nil
+}
+
+func (c *redisCache) GetMsgReaders(msgID string) ([]string, error) {
+	key := fmt.Sprintf("im:msg:read:%s", msgID)
+	return c.client.SMembers(ctx, key).Result()
+}
+
+func (c *redisCache) AddMsgReadPending(msgID string, timestamp int64) error {
+	key := "im:msg:read:pending"
+	return c.client.ZAdd(ctx, key, redis.Z{Score: float64(timestamp), Member: msgID}).Err()
+}
+
+func (c *redisCache) PopMsgReadPending(count int64) ([]string, error) {
+	key := "im:msg:read:pending"
+	result, err := c.client.ZPopMin(ctx, key, count).Result()
+	if err != nil {
+		return nil, err
+	}
+	msgIDs := make([]string, 0, len(result))
+	for _, z := range result {
+		if msgID, ok := z.Member.(string); ok {
+			msgIDs = append(msgIDs, msgID)
+		}
+	}
+	return msgIDs, nil
+}
+
+func (c *redisCache) RemoveMsgReadPending(msgIDs []string) error {
+	if len(msgIDs) == 0 {
+		return nil
+	}
+	key := "im:msg:read:pending"
+	Members := make([]interface{}, len(msgIDs))
+	for i, id := range msgIDs {
+		Members[i] = id
+	}
+	return c.client.ZRem(ctx, key, Members...).Err()
+}
+
 func (c *redisCache) Set(key string, value interface{}, expiration time.Duration) error {
 	return c.client.Set(ctx, key, value, expiration).Err()
 }
