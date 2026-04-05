@@ -1,6 +1,8 @@
 package http
 
 import (
+	"im-chat/internal/application/service/impl"
+	infra_repo "im-chat/internal/infra/repository"
 	"im-chat/internal/interface/http/handler"
 	"im-chat/internal/interface/http/middleware"
 	"net/http"
@@ -9,13 +11,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var (
-	userHandler       = handler.NewUserHandler()
-	friendHandler     = handler.NewFriendHandler()
-	privateMsgHandler = handler.NewPrivateMessageHandler()
-)
-
 func RegisterRoutes(r *gin.Engine) {
+	userRepo := infra_repo.NewUserRepository()
+	friendRepo := infra_repo.NewFriendRepository()
+
+	userService := impl.NewUserServiceImpl(userRepo)
+	friendService := impl.NewFriendServiceImpl(friendRepo)
+
+	userHandler := handler.NewUserHandler(userService)
+	friendHandler := handler.NewFriendHandler(friendService)
+	privateMsgHandler := handler.NewPrivateMessageHandler()
+
 	r.Use(middleware.Recovery())
 
 	r.StaticFS("/public", http.Dir("public"))
