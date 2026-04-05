@@ -8,10 +8,12 @@ import (
 
 type User struct {
 	gorm.Model
-	Username  string    `gorm:"size:32;not null;unique" json:"username"`
-	Password  string    `gorm:"size:64;not null" json:"password"`
+	UID       string    `gorm:"size:32;uniqueIndex;not null" json:"uid"`
+	Username  string    `gorm:"size:32;not null;uniqueIndex" json:"username"`
+	Password  string    `gorm:"size:64;not null" json:"-"`
 	Nickname  string    `gorm:"size:32;not null" json:"nickname"`
 	Avatar    string    `gorm:"size:255;default:''" json:"avatar"`
+	Status    int       `gorm:"default:1" json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

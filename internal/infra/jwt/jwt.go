@@ -4,61 +4,44 @@ import (
 	"errors"
 	"time"
 
+	"im-chat/internal/infra/config"
+
 	"github.com/golang-jwt/jwt/v5"
 )
 
 var (
-	AccessSecret  []byte
-	RefreshSecret []byte
-	AccessExpire  int64
-	RefreshExpire int64
+	secretKey []byte
+	expire    int
+	refresh   int
 )
 
 type Claims struct {
-	UserID int64 `json:"user_id"`
+	UID string `json:"uid"`
 	jwt.RegisteredClaims
 }
 
-func GenerateAccessToken(userID int64) (string, error) {
+func InitJWT(cfg *config.JWTConfig) {
+	secretKey = []byte(cfg.SecretKey)
+	expire = cfg.Expire
+	refresh = cfg.Refresh
+}
+
+func GenerateToken(uid string) (string, error) {
 	claims := Claims{
-		UserID: userID,
+		UID: uid,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(AccessExpire) * time.Second)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expire) * time.Second)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(AccessSecret)
+	return token.SignedString(secretKey)
 }
 
-func GenerateRefreshToken(userID int64) (string, error) {
-	claims := Claims{
-		UserID: userID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(RefreshExpire) * time.Second)),
-		},
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(RefreshSecret)
-}
-
-func ParseAccessToken(tokenString string) (*Claims, error) {
+func ParseToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return AccessSecret, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	if !token.Valid {
-		return nil, errors.New("invalid token")
-	}
-	return claims, nil
-}
-
-func ParseRefreshToken(tokenString string) (*Claims, error) {
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return RefreshSecret, nil
+		return secretKey, nil
 	})
 	if err != nil {
 		return nil, err

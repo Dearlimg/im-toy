@@ -1,27 +1,67 @@
 package main
 
 import (
+	"fmt"
+	"im-chat/internal/domain/entity"
+	"im-chat/internal/infra/config"
+	"im-chat/internal/infra/database"
+	"im-chat/internal/infra/jwt"
+	"im-chat/internal/infra/redis"
 	http_interface "im-chat/internal/interface/http"
 	"im-chat/internal/interface/websocket"
 	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 )
 
-func main() {
-	r := gin.Default()
+func findConfigPath() string {
+	possiblePaths := []string{
+		filepath.Join("config", "config.yaml"),
+		filepath.Join("..", "config", "config.yaml"),
+	}
 
-	// Register HTTP routes
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	return filepath.Join("config", "config.yaml")
+}
+
+func main() {
+	cfgPath := findConfigPath()
+	cfg, err := config.LoadConfig(cfgPath)
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	if err := database.InitDB(&cfg.Database); err != nil {
+		log.Fatalf("Failed to init database: %v", err)
+	}
+
+	if err := database.DB.AutoMigrate(&entity.User{}); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	if err := redis.InitRedis(&cfg.Redis); err != nil {
+		log.Printf("Warning: Failed to init redis: %v", err)
+	}
+
+	jwt.InitJWT(&cfg.JWT)
+
+	r := gin.Default()
 	http_interface.RegisterRoutes(r)
 
-	// Register WebSocket server
 	r.GET("/room", func(c *gin.Context) {
 		websocket.WebSocketHandler(c.Writer, c.Request)
 	})
 
-	// Start server
-	log.Println("Server starting on :8080")
-	if err := r.Run(":8080"); err != nil {
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	log.Printf("Server starting on %s", addr)
+	if err := r.Run(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

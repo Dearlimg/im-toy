@@ -3,141 +3,548 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Socket.IO Chat Demo</title>
+    <title>IM 聊天室</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             padding: 20px;
         }
-        #chat-container {
-            border: 1px solid #ccc;
-            height: 400px;
-            overflow-y: scroll;
-            padding: 10px;
-            margin-bottom: 10px;
+
+        .container {
+            width: 100%;
+            max-width: 480px;
         }
-        #message-input {
-            width: 70%;
-            padding: 8px;
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
         }
-        #to-input {
-            width: 20%;
-            padding: 8px;
+
+        .card h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
         }
-        button {
-            padding: 8px 16px;
+
+        .tabs {
+            display: flex;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #eee;
         }
+
+        .tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: 500;
+            color: #888;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
         .message {
-            margin: 5px 0;
-            padding: 8px;
-            border-radius: 4px;
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
         }
-        .server-message {
-            background-color: #f0f0f0;
-            color: #666;
-        }
-        .user-message {
-            background-color: #e3f2fd;
-            color: #1565c0;
-        }
-        .received-message {
-            background-color: #e8f5e9;
+
+        .message.success {
+            display: block;
+            background: #e8f5e9;
             color: #2e7d32;
+        }
+
+        .message.error {
+            display: block;
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .chat-container {
+            display: none;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            height: 600px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h2 {
+            font-size: 20px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-info span {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .chat-messages {
+            height: 420px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+
+        .chat-message {
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-message.own {
+            align-items: flex-end;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .chat-message.own .message-bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .message-meta {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .chat-message.own .message-meta {
+            text-align: right;
+        }
+
+        .chat-input {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 12px;
+        }
+
+        .room-input {
+            width: 120px;
+            padding: 12px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .room-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .message-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .send-btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .send-btn:hover {
+            opacity: 0.9;
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .system-message {
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+            margin: 16px 0;
         }
     </style>
 </head>
 <body>
-    <h1>Socket.IO Chat Demo</h1>
-    <div id="chat-container"></div>
-    <input type="text" id="to-input" placeholder="Send to (user ID)">
-    <input type="text" id="message-input" placeholder="Type your message...">
-    <button onclick="sendMessage()">Send</button>
+    <div class="container" id="auth-container">
+        <div class="card">
+            <h1>IM 聊天室</h1>
+            <div class="tabs">
+                <div class="tab active" data-tab="login">登录</div>
+                <div class="tab" data-tab="register">注册</div>
+            </div>
+            
+            <form id="login-form">
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="login-username" placeholder="请输入用户名" required>
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" id="login-password" placeholder="请输入密码" required>
+                </div>
+                <button type="submit" class="btn">登录</button>
+            </form>
+            
+            <form id="register-form" style="display: none;">
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="register-username" placeholder="请输入用户名 (2-20字符)" required>
+                </div>
+                <div class="form-group">
+                    <label>昵称</label>
+                    <input type="text" id="register-nickname" placeholder="请输入昵称 (2-20字符)" required>
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" id="register-password" placeholder="请输入密码 (6-20字符)" required>
+                </div>
+                <button type="submit" class="btn">注册</button>
+            </form>
+            
+            <div id="message" class="message"></div>
+        </div>
+    </div>
 
+    <div class="chat-container" id="chat-container">
+        <div class="chat-header">
+            <h2>聊天室</h2>
+            <div class="user-info">
+                <span id="user-display"></span>
+                <button class="logout-btn" onclick="logout()">退出</button>
+            </div>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input">
+            <input type="text" class="room-input" id="room-input" placeholder="房间名" value="default">
+            <input type="text" class="message-input" id="message-input" placeholder="输入消息..." disabled>
+            <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>发送</button>
+        </div>
+    </div>
 
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
+        let currentUser = null;
+        let token = null;
+        let socket = null;
+
+        const authContainer = document.getElementById('auth-container');
         const chatContainer = document.getElementById('chat-container');
+        const messageDiv = document.getElementById('message');
+        const chatMessages = document.getElementById('chat-messages');
         const messageInput = document.getElementById('message-input');
-        const toInput = document.getElementById('to-input');
+        const sendBtn = document.getElementById('send-btn');
+        const roomInput = document.getElementById('room-input');
+        const userDisplay = document.getElementById('user-display');
 
-        // 连接到Socket.IO服务器（注意：这里使用的是HTTP URL，不是WS URL）
-        // 简化连接，直接指定用户ID
-        const socket = io('http://localhost:8080', {
-            query: {
-                user_id: 1
-            },
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000
-        });
-
-        socket.on('connect', () => {
-            addMessage('✅ 已连接到服务器', 'server');
-        });
-
-        socket.on('new_msg', (msg) => {
-            try {
-                if (msg.type === 1) {
-                    // 私聊消息
-                    addMessage(`� 用户${msg.send_id}: ${msg.content}`, 'received');
-                } else if (msg.type === 2) {
-                    // 群聊消息
-                    addMessage(`� 群${msg.group_id} 用户${msg.send_id}: ${msg.content}`, 'received');
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                if (tab.dataset.tab === 'login') {
+                    document.getElementById('login-form').style.display = 'block';
+                    document.getElementById('register-form').style.display = 'none';
                 } else {
-                    // 其他类型消息
-                    addMessage(`📢 ${JSON.stringify(msg)}`, 'server');
+                    document.getElementById('login-form').style.display = 'none';
+                    document.getElementById('register-form').style.display = 'block';
+                }
+                hideMessage();
+            });
+        });
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            try {
+                const response = await fetch('/api/user/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.code === 0) {
+                    currentUser = data.data;
+                    token = data.data.token;
+                    showMessage('登录成功！', 'success');
+                    setTimeout(() => showChat(), 1000);
+                } else {
+                    showMessage(data.message, 'error');
                 }
             } catch (error) {
-                addMessage(`❌ 解析消息错误: ${JSON.stringify(msg)}`, 'server');
+                showMessage('请求失败，请稍后重试', 'error');
             }
         });
 
-        socket.on('disconnect', () => {
-            addMessage('❌ 与服务器断开连接', 'server');
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('register-username').value;
+            const nickname = document.getElementById('register-nickname').value;
+            const password = document.getElementById('register-password').value;
+            
+            try {
+                const response = await fetch('/api/user/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, nickname, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.code === 0) {
+                    currentUser = data.data;
+                    token = data.data.token;
+                    showMessage('注册成功！', 'success');
+                    setTimeout(() => showChat(), 1000);
+                } else {
+                    showMessage(data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('请求失败，请稍后重试', 'error');
+            }
         });
 
-        socket.on('connect_error', (error) => {
-            addMessage(`❌ 连接错误: ${error}`, 'server');
-        });
+        function showMessage(text, type) {
+            messageDiv.textContent = text;
+            messageDiv.className = 'message ' + type;
+        }
 
-        function addMessage(text, type) {
-            const div = document.createElement('div');
-            div.className = `message ${type}-message`;
-            div.textContent = text;
-            chatContainer.appendChild(div);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+        function hideMessage() {
+            messageDiv.style.display = 'none';
+        }
+
+        function showChat() {
+            authContainer.style.display = 'none';
+            chatContainer.style.display = 'block';
+            userDisplay.textContent = currentUser.nickname;
+            connectWebSocket();
+        }
+
+        function connectWebSocket() {
+            const room = roomInput.value || 'default';
+            const wsUrl = `ws://localhost:8080/room?room=${encodeURIComponent(room)}&token=${encodeURIComponent(token)}`;
+            
+            socket = new WebSocket(wsUrl);
+            
+            socket.onopen = function() {
+                addSystemMessage(`已连接到房间: ${room}`);
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+            };
+            
+            socket.onmessage = function(event) {
+                try {
+                    const msg = JSON.parse(event.data);
+                    addMessage(msg);
+                } catch (e) {
+                    addSystemMessage(event.data);
+                }
+            };
+            
+            socket.onclose = function() {
+                addSystemMessage('连接已断开');
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+            };
+            
+            socket.onerror = function(error) {
+                addSystemMessage('连接错误');
+            };
         }
 
         function sendMessage() {
             const content = messageInput.value.trim();
-            if (!content) return;
-
-            const to = toInput.value.trim();
+            if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
             
-            if (to) {
-                // 发送私聊消息
-                socket.emit('private_chat', {
-                    recv_id: parseInt(to),
-                    content: content
-                });
-                addMessage(`💬 给用户${to}: ${content}`, 'user');
-            } else {
-                // 发送广播消息（后端没有实现广播，这里改为提示）
-                addMessage(`⚠️ 请输入目标用户ID`, 'server');
-            }
-
+            const msg = {
+                type: 1,
+                content: content
+            };
+            
+            socket.send(JSON.stringify(msg));
             messageInput.value = '';
         }
 
-        // 按Enter键发送消息
-        messageInput.addEventListener('keypress', (e) => {
+        messageInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 sendMessage();
             }
         });
+
+        roomInput.addEventListener('change', function() {
+            if (socket) {
+                socket.close();
+            }
+            chatMessages.innerHTML = '';
+            connectWebSocket();
+        });
+
+        function addMessage(msg) {
+            const isOwn = msg.from_uid === currentUser.uid;
+            const div = document.createElement('div');
+            div.className = 'chat-message' + (isOwn ? ' own' : '');
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = msg.content;
+            
+            const meta = document.createElement('div');
+            meta.className = 'message-meta';
+            const time = new Date(msg.send_time * 1000).toLocaleTimeString();
+            meta.textContent = `${msg.from_username} · ${time}`;
+            
+            div.appendChild(bubble);
+            div.appendChild(meta);
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function addSystemMessage(text) {
+            const div = document.createElement('div');
+            div.className = 'system-message';
+            div.textContent = text;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function logout() {
+            if (socket) {
+                socket.close();
+            }
+            currentUser = null;
+            token = null;
+            chatContainer.style.display = 'none';
+            authContainer.style.display = 'flex';
+            chatMessages.innerHTML = '';
+            document.getElementById('login-form').reset();
+            document.getElementById('register-form').reset();
+            hideMessage();
+        }
     </script>
 </body>
 </html>
