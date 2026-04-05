@@ -87,6 +87,21 @@ func (r *GroupRepositoryImpl) FindMessagesByGroupID(groupID string, limit int) (
 	return messages, nil
 }
 
+func (r *GroupRepositoryImpl) FindUnreadMessages(groupID, lastReadMsgID string, limit int) ([]*entity.GroupMessage, error) {
+	var messages []*entity.GroupMessage
+	query := database.DB.Where("group_id = ?", groupID)
+
+	if lastReadMsgID != "" {
+		query = query.Where("msg_id > ?", lastReadMsgID)
+	}
+
+	err := query.Order("send_time ASC").Limit(limit).Find(&messages).Error
+	if err != nil {
+		return nil, err
+	}
+	return messages, nil
+}
+
 func (r *GroupRepositoryImpl) FindMessagesByMsgIDs(msgIDs []string) ([]*entity.GroupMessage, error) {
 	if len(msgIDs) == 0 {
 		return []*entity.GroupMessage{}, nil

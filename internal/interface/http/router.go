@@ -41,13 +41,14 @@ func RegisterRoutes(r *gin.Engine) {
 
 		auth.POST("/private/send", container.PrivateMsgHandler.SendMessage)
 		auth.GET("/private/conversation", container.PrivateMsgHandler.GetConversation)
-		auth.GET("/private/unread", container.PrivateMsgHandler.GetUnreadCount)
+		auth.GET("/private/unread-counts", container.PrivateMsgHandler.GetUnreadCounts)
 		auth.POST("/private/mark-read", container.PrivateMsgHandler.MarkAsRead)
 
 		auth.POST("/group/create", container.GroupHandler.CreateGroup)
 		auth.GET("/group/list", container.GroupHandler.GetGroupList)
 		auth.GET("/group/members", container.GroupHandler.GetGroupMembers)
 		auth.GET("/group/messages", container.GroupHandler.GetGroupMessages)
+		auth.GET("/group/unread-messages", container.GroupHandler.GetGroupUnreadMessages)
 
 		auth.POST("/message/report-read", container.MessageHandler.ReportRead)
 		auth.GET("/message/unread-count", container.MessageHandler.GetUnreadCount)

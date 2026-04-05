@@ -167,6 +167,19 @@ func (h *PrivateMessageHandler) GetUnreadCount(c *gin.Context) {
 	response.Success(c, gin.H{"count": count})
 }
 
+func (h *PrivateMessageHandler) GetUnreadCounts(c *gin.Context) {
+	uid, _ := c.Get("uid")
+	currentUID := uid.(string)
+
+	countMap, err := h.msgRepo.GetUnreadCountPerFriend(currentUID)
+	if err != nil {
+		response.Failed(c, "获取未读消息数失败")
+		return
+	}
+
+	response.Success(c, countMap)
+}
+
 func (h *PrivateMessageHandler) MarkAsRead(c *gin.Context) {
 	uid, _ := c.Get("uid")
 	currentUID := uid.(string)

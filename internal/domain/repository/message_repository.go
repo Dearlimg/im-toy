@@ -7,4 +7,5 @@ type PrivateMessageRepository interface {
 	FindConversation(uid1, uid2 string, limit, offset int) ([]*entity.PrivateMessage, error)
 	MarkAsRead(fromUID, toUID string) error
 	GetUnreadCount(uid string) (int64, error)
+	GetUnreadCountPerFriend(uid string) (map[string]int64, error)
 }

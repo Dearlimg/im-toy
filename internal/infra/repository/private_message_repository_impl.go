@@ -44,3 +44,26 @@ func (r *PrivateMessageRepositoryImpl) GetUnreadCount(uid string) (int64, error)
 		Count(&count).Error
 	return count, err
 }
+
+func (r *PrivateMessageRepositoryImpl) GetUnreadCountPerFriend(uid string) (map[string]int64, error) {
+	type Result struct {
+		FromUID string
+		Count   int64
+	}
+	var results []Result
+	err := database.DB.Model(&entity.PrivateMessage{}).
+		Select("from_uid, COUNT(*) as count").
+		Where("to_uid = ? AND `read` = ?", uid, 0).
+		Group("from_uid").
+		Find(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	countMap := make(map[string]int64)
+	for _, r := range results {
+		countMap[r.FromUID] = r.Count
+	}
+	return countMap, nil
+}

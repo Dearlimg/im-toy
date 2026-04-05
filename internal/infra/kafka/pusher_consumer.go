@@ -141,6 +141,12 @@ func (h *pusherHandler) pushGroupMessage(event *GroupMessageEvent) {
 
 	for _, m := range members {
 		if m.UID != event.FromUID {
+			if redis.Cache != nil {
+				online, _ := redis.Cache.IsUserOnline(m.UID)
+				if !online {
+					continue
+				}
+			}
 			if globalPusher != nil {
 				globalPusher.PushToUser(m.UID, wsPayload)
 			}
@@ -149,6 +155,14 @@ func (h *pusherHandler) pushGroupMessage(event *GroupMessageEvent) {
 }
 
 func (h *pusherHandler) pushPrivateMessage(event *PrivateMessageEvent) {
+	if redis.Cache != nil {
+		online, _ := redis.Cache.IsUserOnline(event.ToUID)
+		if !online {
+			log.Printf("User %s is offline, skip push private message %s", event.ToUID, event.MsgID)
+			return
+		}
+	}
+
 	wsPayload := map[string]interface{}{
 		"type":      "private_message",
 		"msg_id":    event.MsgID,

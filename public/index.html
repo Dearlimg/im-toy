@@ -301,15 +301,16 @@
       document.getElementById('authPage').classList.remove('hidden');
     }
 
-    function enterChat() {
+    async function enterChat() {
       document.getElementById('authPage').classList.add('hidden');
       document.getElementById('chatPage').classList.remove('hidden');
       document.getElementById('meInfo').textContent =
         (currentUser.nickname || currentUser.username) + ' | uid: ' + currentUser.uid;
       switchSide('friends');
-      loadFriends();
-      loadFriendRequests();
-      loadGroups();
+      await loadFriends();
+      await loadFriendRequests();
+      await loadGroups();
+      await loadUnreadCounts();
       connectWS();
     }
 
@@ -396,6 +397,23 @@
         `).join('') : '<div>暂无请求</div>';
       } catch (e) {
         el.textContent = '网络错误';
+      }
+    }
+
+    async function loadUnreadCounts() {
+      try {
+        const res = await fetch(API + '/private/unread-counts', {
+          headers: authHeader()
+        });
+        const j = await res.json();
+        if (j.code === 0 && j.data) {
+          for (const friendUid in j.data) {
+            unreadCounts[friendUid] = j.data[friendUid] || 0;
+          }
+          loadFriends();
+        }
+      } catch (e) {
+        console.error('获取未读数失败', e);
       }
     }
 
@@ -536,10 +554,10 @@
           return;
         }
         const msgs = j.data || [];
-        
-        if (msgs.length > 0) {
-          const lastMsg = msgs[msgs.length - 1];
-          reportRead(friendUid, lastMsg.msg_id);
+
+        const unreadMsgs = msgs.filter(m => m.from_uid !== currentUser.uid && !m.is_read && (!readStatus || !readStatus.last_read_msg_id || m.msg_id > readStatus.last_read_msg_id));
+        if (unreadMsgs.length > 0) {
+          reportRead(friendUid, unreadMsgs[unreadMsgs.length - 1].msg_id);
         }
 
         box.innerHTML = msgs.map(m => {
@@ -549,6 +567,8 @@
           return renderMsgLine(isSelf, m.content, m.send_time, who, m.is_read || isRead, m.msg_id);
         }).join('');
         box.scrollTop = box.scrollHeight;
+        unreadCounts[friendUid] = 0;
+        loadFriends();
       } catch (e) {
         box.textContent = '网络错误';
       }
@@ -615,7 +635,11 @@
     async function loadGroupHistory(groupId) {
       const box = document.getElementById('chatMessages');
       try {
-        const res = await fetch(API + '/group/messages?group_id=' + encodeURIComponent(groupId) + '&limit=50', {
+        const readStatus = await getRoomReadStatus(groupId);
+        const url = readStatus && readStatus.last_read_msg_id
+          ? API + '/group/unread-messages?group_id=' + encodeURIComponent(groupId) + '&last_read_msg_id=' + encodeURIComponent(readStatus.last_read_msg_id) + '&limit=100'
+          : API + '/group/messages?group_id=' + encodeURIComponent(groupId) + '&limit=50';
+        const res = await fetch(url, {
           headers: { 'Authorization': 'Bearer ' + token }
         });
         const j = await res.json();
@@ -624,7 +648,7 @@
           return;
         }
         const msgs = j.data || [];
-        
+
         if (msgs.length > 0) {
           const unreadMsgIds = msgs.filter(m => m.from_uid !== currentUser.uid).map(m => m.msg_id);
           if (unreadMsgIds.length > 0) {
@@ -638,6 +662,8 @@
           return renderMsgLine(self, m.content, m.send_time, who, false, m.msg_id, m.read_count, m.total_count);
         }).join('');
         box.scrollTop = box.scrollHeight;
+        unreadCounts[groupId] = 0;
+        loadGroups();
       } catch (e) {
         box.textContent = '网络错误';
       }

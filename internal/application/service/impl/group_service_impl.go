@@ -93,6 +93,64 @@ func (s *GroupServiceImpl) GetGroupList(currentUID string) ([]*dto.GroupResp, er
 	return resp, nil
 }
 
+func (s *GroupServiceImpl) GetGroupUnreadMessages(currentUID, groupID, lastReadMsgID string, limit int) ([]*dto.GroupMessageResp, error) {
+	if _, err := s.groupRepo.FindMember(groupID, currentUID); err != nil {
+		return nil, apperrors.New(response.CodeGroupUnauthorized, response.GetMsg(response.CodeGroupUnauthorized))
+	}
+
+	messages, err := s.groupRepo.FindUnreadMessages(groupID, lastReadMsgID, limit)
+	if err != nil {
+		return nil, apperrors.New(response.CodeGroupMessageGetFailed, response.GetMsg(response.CodeGroupMessageGetFailed))
+	}
+
+	members, err := s.groupRepo.FindMembersByGroupID(groupID)
+	if err != nil {
+		return nil, apperrors.New(response.CodeGroupMemberGetFailed, response.GetMsg(response.CodeGroupMemberGetFailed))
+	}
+	totalCount := len(members)
+
+	var uids []string
+	msgIDs := make([]string, 0, len(messages))
+	for _, m := range messages {
+		uids = append(uids, m.FromUID)
+		msgIDs = append(msgIDs, m.MsgID)
+	}
+
+	var users []*entity.User
+	if len(uids) > 0 {
+		users, err = s.userRepo.FindByUIDs(uids)
+		if err != nil {
+			return nil, apperrors.New(response.CodeGroupUserInfoGetFailed, response.GetMsg(response.CodeGroupUserInfoGetFailed))
+		}
+	}
+
+	userMap := make(map[string]*entity.User)
+	for _, u := range users {
+		userMap[u.UID] = u
+	}
+
+	readCountMap, _ := s.messageReadRepo.BatchGetReadCount(msgIDs)
+
+	var resp []*dto.GroupMessageResp
+	for _, m := range messages {
+		if user, ok := userMap[m.FromUID]; ok {
+			resp = append(resp, &dto.GroupMessageResp{
+				MsgID:        m.MsgID,
+				GroupID:      m.GroupID,
+				FromUID:      m.FromUID,
+				FromUsername: user.Username,
+				FromNickname: user.Nickname,
+				Content:      m.Content,
+				SendTime:     m.SendTime,
+				ReadCount:    readCountMap[m.MsgID],
+				TotalCount:   totalCount,
+			})
+		}
+	}
+
+	return resp, nil
+}
+
 func (s *GroupServiceImpl) GetGroupMembers(currentUID, groupID string) ([]*dto.GroupMemberResp, error) {
 	if _, err := s.groupRepo.FindMember(groupID, currentUID); err != nil {
 		return nil, apperrors.New(response.CodeGroupUnauthorized, response.GetMsg(response.CodeGroupUnauthorized))
