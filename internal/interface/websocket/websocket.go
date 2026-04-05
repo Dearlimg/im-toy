@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"im-chat/internal/domain/entity"
@@ -20,6 +21,8 @@ import (
 const (
 	HeartbeatInterval = 30 * time.Second
 	MsgRateLimit      = 60
+	ConnExpireSeconds = 60
+	CleanupInterval   = 30 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -29,18 +32,48 @@ var upgrader = websocket.Upgrader{
 }
 
 type Conn struct {
-	Conn     *websocket.Conn
-	UserID   string
-	Username string
-	RoomID   string
-	SendChan chan []byte
-	Closed   bool
-	LastBeat time.Time
+	Conn         *websocket.Conn
+	UserID       string
+	Username     string
+	RoomID       string
+	SendChan     chan []byte
+	Closed       bool
+	LastBeatTime int64
 }
 
 var rooms = make(map[string]map[*Conn]bool)
 var userConns = make(map[string]*Conn)
-var mu sync.Mutex
+var mu sync.RWMutex
+
+func init() {
+	go cleanupExpiredConn()
+}
+
+func cleanupExpiredConn() {
+	ticker := time.NewTicker(CleanupInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now().Unix()
+		mu.Lock()
+		for uid, conn := range userConns {
+			if now-atomic.LoadInt64(&conn.LastBeatTime) > ConnExpireSeconds {
+				if !conn.Closed {
+					conn.Closed = true
+					close(conn.SendChan)
+					conn.Conn.Close()
+				}
+				delete(userConns, uid)
+				if redis.Cache != nil {
+					redis.Cache.SetUserOffline(uid)
+					redis.Cache.RemoveConn(uid)
+				}
+				log.Printf("Cleaned up expired connection: %s", uid)
+			}
+		}
+		mu.Unlock()
+	}
+}
 
 type Message struct {
 	Type         int    `json:"type"`
@@ -92,13 +125,13 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	conn := &Conn{
-		Conn:     wsConn,
-		UserID:   user.UID,
-		Username: user.Username,
-		RoomID:   room,
-		SendChan: make(chan []byte, 256),
-		Closed:   false,
-		LastBeat: time.Now(),
+		Conn:         wsConn,
+		UserID:       user.UID,
+		Username:     user.Username,
+		RoomID:       room,
+		SendChan:     make(chan []byte, 256),
+		Closed:       false,
+		LastBeatTime: time.Now().Unix(),
 	}
 
 	mu.Lock()
@@ -106,6 +139,11 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		rooms[room] = make(map[*Conn]bool)
 	}
 	rooms[room][conn] = true
+	if oldConn, exists := userConns[user.UID]; exists {
+		close(oldConn.SendChan)
+		oldConn.Closed = true
+		oldConn.Conn.Close()
+	}
 	userConns[user.UID] = conn
 	mu.Unlock()
 
@@ -142,6 +180,7 @@ func (c *Conn) heartbeat() {
 		if c.Closed {
 			break
 		}
+		atomic.StoreInt64(&c.LastBeatTime, time.Now().Unix())
 		if redis.Cache != nil {
 			redis.Cache.RefreshUserOnline(c.UserID)
 		}
@@ -177,7 +216,7 @@ func (c *Conn) readPump() {
 		case "group_read_receipt":
 			handleGroupReadReceipt(c, &wsMsg)
 		case "heartbeat":
-			c.LastBeat = time.Now()
+			atomic.StoreInt64(&c.LastBeatTime, time.Now().Unix())
 			sendHeartbeatAck(c)
 		default:
 			handleRoomMessage(c, message)
@@ -449,9 +488,9 @@ func SendBytesToUser(uid string, msgBytes []byte) {
 		}
 	}
 
-	mu.Lock()
+	mu.RLock()
 	conn, exists := userConns[uid]
-	mu.Unlock()
+	mu.RUnlock()
 
 	if exists && !conn.Closed {
 		select {
