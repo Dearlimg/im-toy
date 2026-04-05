@@ -6,16 +6,17 @@ import (
 	"im-chat/internal/application/service"
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/domain/repository"
-	"im-chat/internal/infra/database"
 )
 
 type FriendServiceImpl struct {
 	friendRepo repository.FriendRepository
+	userRepo   repository.UserRepository
 }
 
-func NewFriendServiceImpl(friendRepo repository.FriendRepository) service.FriendService {
+func NewFriendServiceImpl(friendRepo repository.FriendRepository, userRepo repository.UserRepository) service.FriendService {
 	return &FriendServiceImpl{
 		friendRepo: friendRepo,
+		userRepo:   userRepo,
 	}
 }
 
@@ -24,8 +25,8 @@ func (s *FriendServiceImpl) AddFriend(currentUID string, req *dto.AddFriendReq) 
 		return errors.New("不能添加自己为好友")
 	}
 
-	var friendUser entity.User
-	if err := database.DB.Where("uid = ?", req.FriendUID).First(&friendUser).Error; err != nil {
+	_, err := s.userRepo.FindByUID(req.FriendUID)
+	if err != nil {
 		return errors.New("用户不存在")
 	}
 
@@ -157,11 +158,8 @@ func getInt(m map[string]interface{}, key string) int {
 }
 
 func (s *FriendServiceImpl) SearchUser(currentUID string, keyword string) ([]*dto.UserResp, error) {
-	var users []*entity.User
-	if err := database.DB.Where("username LIKE ? OR nickname LIKE ?", "%"+keyword+"%", "%"+keyword+"%").
-		Where("uid != ?", currentUID).
-		Limit(20).
-		Find(&users).Error; err != nil {
+	users, err := s.userRepo.SearchUsers(keyword, currentUID, 20)
+	if err != nil {
 		return nil, errors.New("搜索用户失败")
 	}
 

@@ -6,19 +6,20 @@ import (
 	"im-chat/internal/application/service"
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/domain/repository"
-	"im-chat/internal/infra/database"
 	"im-chat/internal/infra/idgen"
 )
 
 type GroupServiceImpl struct {
 	groupRepo       repository.GroupRepository
 	messageReadRepo repository.MessageReadRepository
+	userRepo        repository.UserRepository
 }
 
-func NewGroupServiceImpl(groupRepo repository.GroupRepository, messageReadRepo repository.MessageReadRepository) service.GroupService {
+func NewGroupServiceImpl(groupRepo repository.GroupRepository, messageReadRepo repository.MessageReadRepository, userRepo repository.UserRepository) service.GroupService {
 	return &GroupServiceImpl{
 		groupRepo:       groupRepo,
 		messageReadRepo: messageReadRepo,
+		userRepo:        userRepo,
 	}
 }
 
@@ -96,8 +97,8 @@ func (s *GroupServiceImpl) GetGroupMembers(currentUID, groupID string) ([]*dto.G
 		return nil, errors.New("无权查看该群或您不是群成员")
 	}
 
-	var members []*entity.GroupMember
-	if err := database.DB.Where("group_id = ? AND status = 1", groupID).Find(&members).Error; err != nil {
+	members, err := s.groupRepo.FindMembersByGroupID(groupID)
+	if err != nil {
 		return nil, errors.New("获取群成员失败")
 	}
 
@@ -106,8 +107,8 @@ func (s *GroupServiceImpl) GetGroupMembers(currentUID, groupID string) ([]*dto.G
 		uids = append(uids, m.UID)
 	}
 
-	var users []*entity.User
-	if err := database.DB.Where("uid IN ?", uids).Find(&users).Error; err != nil {
+	users, err := s.userRepo.FindByUIDs(uids)
+	if err != nil {
 		return nil, errors.New("获取用户信息失败")
 	}
 
@@ -157,7 +158,8 @@ func (s *GroupServiceImpl) GetGroupMessages(currentUID, groupID string, limit in
 
 	var users []*entity.User
 	if len(uids) > 0 {
-		if err := database.DB.Where("uid IN ?", uids).Find(&users).Error; err != nil {
+		users, err = s.userRepo.FindByUIDs(uids)
+		if err != nil {
 			return nil, errors.New("获取用户信息失败")
 		}
 	}

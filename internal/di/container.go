@@ -38,8 +38,8 @@ func NewContainer() *Container {
 	c.MessageReadRepo = repository.NewMessageReadRepository()
 
 	c.UserService = impl.NewUserServiceImpl(c.UserRepo)
-	c.FriendService = impl.NewFriendServiceImpl(c.FriendRepo)
-	c.GroupService = impl.NewGroupServiceImpl(c.GroupRepo, c.MessageReadRepo)
+	c.FriendService = impl.NewFriendServiceImpl(c.FriendRepo, c.UserRepo)
+	c.GroupService = impl.NewGroupServiceImpl(c.GroupRepo, c.MessageReadRepo, c.UserRepo)
 
 	c.UserHandler = handler.NewUserHandler(c.UserService)
 	c.FriendHandler = handler.NewFriendHandler(c.FriendService)

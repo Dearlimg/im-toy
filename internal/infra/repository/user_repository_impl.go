@@ -43,6 +43,30 @@ func (r *UserRepositoryImpl) FindByUsername(username string) (*entity.User, erro
 	return &user, nil
 }
 
+func (r *UserRepositoryImpl) SearchUsers(keyword string, excludeUID string, limit int) ([]*entity.User, error) {
+	var users []*entity.User
+	err := database.DB.Where("(username LIKE ? OR nickname LIKE ?) AND uid != ?",
+		"%"+keyword+"%", "%"+keyword+"%", excludeUID).
+		Limit(limit).
+		Find(&users).Error
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+func (r *UserRepositoryImpl) FindByUIDs(uids []string) ([]*entity.User, error) {
+	var users []*entity.User
+	if len(uids) == 0 {
+		return users, nil
+	}
+	err := database.DB.Where("uid IN ?", uids).Find(&users).Error
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func (r *UserRepositoryImpl) Update(user *entity.User) error {
 	return database.DB.Save(user).Error
 }
