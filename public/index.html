@@ -1036,7 +1036,7 @@
             container.scrollTop = container.scrollHeight;
         }
 
-        async function sendMessage() {
+        function sendMessage() {
             if (!currentChatFriend) {
                 alert('请先选择好友');
                 return;
@@ -1045,32 +1045,30 @@
             const content = input.value.trim();
             if (!content) return;
 
-            try {
-                const res = await fetch(API_BASE + '/private/send', {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token 
-                    },
-                    body: JSON.stringify({ to_uid: currentChatFriend.friend_uid, content })
-                });
-                const data = await res.json();
-                if (data.code === 0) {
-                    input.value = '';
-                    const selfMsg = {
-                        from_uid: currentUser.uid,
-                        from_nickname: currentUser.nickname,
-                        from_username: currentUser.username,
-                        content: content,
-                        send_time: Date.now()
-                    };
-                    addMessageToChat(selfMsg);
-                } else {
-                    alert(data.message || '发送失败');
-                }
-            } catch (e) {
-                alert('网络错误');
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('WebSocket 连接未建立，请刷新页面重试');
+                return;
             }
+
+            const wsMsg = {
+                type: 'private_message',
+                to_uid: currentChatFriend.friend_uid,
+                content: content,
+                timestamp: Date.now()
+            };
+
+            ws.send(JSON.stringify(wsMsg));
+            console.log('📤 Sent message via WebSocket:', wsMsg);
+
+            const selfMsg = {
+                from_uid: currentUser.uid,
+                from_nickname: currentUser.nickname,
+                from_username: currentUser.username,
+                content: content,
+                send_time: Date.now()
+            };
+            addMessageToChat(selfMsg);
+            input.value = '';
         }
 
         window.onload = function() {

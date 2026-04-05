@@ -9,7 +9,9 @@ import (
 
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/infra/database"
+	"im-chat/internal/infra/idgen"
 	"im-chat/internal/infra/jwt"
+	infra_repo "im-chat/internal/infra/repository"
 
 	"github.com/gorilla/websocket"
 )
@@ -42,6 +44,14 @@ type Message struct {
 	FromUsername string `json:"from_username"`
 	Content      string `json:"content"`
 	SendTime     int64  `json:"send_time"`
+}
+
+type WSMessage struct {
+	Type      string `json:"type"`
+	MsgID     string `json:"msg_id,omitempty"`
+	ToUID     string `json:"to_uid,omitempty"`
+	Content   string `json:"content,omitempty"`
+	Timestamp int64  `json:"timestamp,omitempty"`
 }
 
 func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
@@ -127,37 +137,98 @@ func (c *Conn) readPump() {
 			break
 		}
 
-		log.Printf("Received message from %s in room %s: %s", c.Username, c.RoomID, message)
+		log.Printf("Received message from %s: %s", c.Username, message)
 
-		var msg Message
-		if err := json.Unmarshal(message, &msg); err != nil {
-			msg = Message{
-				Type:         1,
-				RoomID:       c.RoomID,
-				FromUID:      c.UserID,
-				FromUsername: c.Username,
-				Content:      string(message),
-				SendTime:     time.Now().Unix(),
-			}
-		} else {
-			msg.FromUID = c.UserID
-			msg.FromUsername = c.Username
-			msg.SendTime = time.Now().Unix()
+		var wsMsg WSMessage
+		if err := json.Unmarshal(message, &wsMsg); err != nil {
+			log.Printf("Failed to unmarshal WebSocket message: %v", err)
+			continue
 		}
 
-		msgBytes, _ := json.Marshal(msg)
-
-		mu.Lock()
-		for conn := range rooms[c.RoomID] {
-			select {
-			case conn.SendChan <- msgBytes:
-			default:
-				close(conn.SendChan)
-				delete(rooms[c.RoomID], conn)
-			}
+		switch wsMsg.Type {
+		case "private_message":
+			handlePrivateMessage(c, &wsMsg)
+		default:
+			handleRoomMessage(c, message)
 		}
-		mu.Unlock()
 	}
+}
+
+func handleRoomMessage(c *Conn, message []byte) {
+	var msg Message
+	if err := json.Unmarshal(message, &msg); err != nil {
+		msg = Message{
+			Type:         1,
+			RoomID:       c.RoomID,
+			FromUID:      c.UserID,
+			FromUsername: c.Username,
+			Content:      string(message),
+			SendTime:     time.Now().Unix(),
+		}
+	} else {
+		msg.FromUID = c.UserID
+		msg.FromUsername = c.Username
+		msg.SendTime = time.Now().Unix()
+	}
+
+	msgBytes, _ := json.Marshal(msg)
+
+	mu.Lock()
+	for conn := range rooms[c.RoomID] {
+		select {
+		case conn.SendChan <- msgBytes:
+		default:
+			close(conn.SendChan)
+			delete(rooms[c.RoomID], conn)
+		}
+	}
+	mu.Unlock()
+}
+
+func handlePrivateMessage(c *Conn, msg *WSMessage) {
+	if msg.ToUID == "" || msg.Content == "" {
+		log.Printf("Invalid private message: %+v", msg)
+		return
+	}
+
+	msgID := idgen.Gen.NextUID()
+	sendTime := time.Now().UnixMilli()
+
+	newMsg := &entity.PrivateMessage{
+		MsgID:    msgID,
+		FromUID:  c.UserID,
+		ToUID:    msg.ToUID,
+		Content:  msg.Content,
+		Type:     1,
+		SendTime: sendTime,
+		Read:     0,
+	}
+
+	msgRepo := infra_repo.NewPrivateMessageRepository()
+	if err := msgRepo.Create(newMsg); err != nil {
+		log.Printf("Failed to save private message: %v", err)
+		return
+	}
+
+	var fromUser entity.User
+	if err := database.DB.Where("uid = ?", c.UserID).First(&fromUser).Error; err != nil {
+		fromUser.Username = "未知用户"
+		fromUser.Nickname = "未知用户"
+	}
+
+	wsMsg := map[string]interface{}{
+		"type":          "private_message",
+		"msg_id":        newMsg.MsgID,
+		"from_uid":      c.UserID,
+		"from_username": fromUser.Username,
+		"from_nickname": fromUser.Nickname,
+		"to_uid":        msg.ToUID,
+		"content":       msg.Content,
+		"send_time":     sendTime,
+	}
+
+	SendPrivateMessage(msg.ToUID, wsMsg)
+	log.Printf("Private message saved and sent: from=%s to=%s", c.UserID, msg.ToUID)
 }
 
 func (c *Conn) writePump() {
@@ -204,16 +275,22 @@ func SendPrivateMessage(toUID string, msg map[string]interface{}) {
 		return
 	}
 
+	log.Printf("Attempting to send private message to user: %s", toUID)
+
 	mu.Lock()
 	conn, exists := userConns[toUID]
+	log.Printf("User %s exists in connections: %v, closed: %v", toUID, exists, exists && conn.Closed)
 	mu.Unlock()
 
 	if exists && !conn.Closed {
 		select {
 		case conn.SendChan <- msgBytes:
+			log.Printf("✅ Private message sent to user: %s", toUID)
 		default:
-			log.Printf("Failed to send private message to %s: send chan full", toUID)
+			log.Printf("❌ Failed to send private message to %s: send chan full", toUID)
 		}
+	} else {
+		log.Printf("❌ User %s is not connected, cannot send private message", toUID)
 	}
 }
 
