@@ -2,6 +2,7 @@ package http
 
 import (
 	"im-chat/internal/di"
+	"im-chat/internal/infra/database"
 	"im-chat/internal/interface/http/middleware"
 	"net/http"
 
@@ -25,6 +26,8 @@ func RegisterRoutes(r *gin.Engine) {
 		public.POST("/user/register", container.UserHandler.Register)
 		public.POST("/user/login", container.UserHandler.Login)
 	}
+
+	r.GET("/metrics", database.PoolStatsHandler())
 
 	auth := r.Group("/api")
 	auth.Use(middleware.AuthMiddleware())
