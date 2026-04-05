@@ -373,23 +373,32 @@ func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
 	members, _ := groupRepo.FindMembersByGroupID(msg.GroupID)
 	totalCount := len(members)
 
-	for _, msgID := range msg.MsgIDs {
-		readCount, _ := readRepo.GetReadCount(msgID)
-
-		var groupMsg entity.GroupMessage
-		if err := database.DB.Where("msg_id = ?", msgID).First(&groupMsg).Error; err == nil && groupMsg.FromUID != c.UserID {
-			receipt := map[string]interface{}{
-				"type":        "group_read_receipt",
-				"group_id":    msg.GroupID,
-				"msg_id":      msgID,
-				"read_uid":    c.UserID,
-				"read_count":  readCount,
-				"total_count": totalCount,
-				"read_time":   readTime,
-			}
-			receiptBytes, _ := json.Marshal(receipt)
-			SendBytesToUser(groupMsg.FromUID, receiptBytes)
+	readCountMap, _ := readRepo.BatchGetReadCount(msg.MsgIDs)
+	msgMap := make(map[string]*entity.GroupMessage)
+	if len(msg.MsgIDs) > 0 {
+		messages, _ := groupRepo.FindMessagesByMsgIDs(msg.MsgIDs)
+		for i := range messages {
+			msgMap[messages[i].MsgID] = messages[i]
 		}
+	}
+
+	for _, msgID := range msg.MsgIDs {
+		groupMsg, exists := msgMap[msgID]
+		if !exists || groupMsg.FromUID == c.UserID {
+			continue
+		}
+
+		receipt := map[string]interface{}{
+			"type":        "group_read_receipt",
+			"group_id":    msg.GroupID,
+			"msg_id":      msgID,
+			"read_uid":    c.UserID,
+			"read_count":  readCountMap[msgID],
+			"total_count": totalCount,
+			"read_time":   readTime,
+		}
+		receiptBytes, _ := json.Marshal(receipt)
+		SendBytesToUser(groupMsg.FromUID, receiptBytes)
 	}
 }
 

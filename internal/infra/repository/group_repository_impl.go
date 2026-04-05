@@ -86,3 +86,15 @@ func (r *GroupRepositoryImpl) FindMessagesByGroupID(groupID string, limit int) (
 	}
 	return messages, nil
 }
+
+func (r *GroupRepositoryImpl) FindMessagesByMsgIDs(msgIDs []string) ([]*entity.GroupMessage, error) {
+	if len(msgIDs) == 0 {
+		return []*entity.GroupMessage{}, nil
+	}
+	var messages []*entity.GroupMessage
+	err := database.DB.Where("msg_id IN ?", msgIDs).Find(&messages).Error
+	if err != nil {
+		return nil, err
+	}
+	return messages, nil
+}

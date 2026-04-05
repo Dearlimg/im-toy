@@ -16,4 +16,5 @@ type GroupRepository interface {
 
 	CreateMessage(msg *entity.GroupMessage) error
 	FindMessagesByGroupID(groupID string, limit int) ([]*entity.GroupMessage, error)
+	FindMessagesByMsgIDs(msgIDs []string) ([]*entity.GroupMessage, error)
 }
