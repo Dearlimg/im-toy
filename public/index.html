@@ -701,7 +701,7 @@
       let readStatusHtml = '';
       if (self) {
         if (readCount !== undefined && totalCount !== undefined) {
-          readStatusHtml = `<div class="read-status">${readCount}人已读 / ${totalCount}人</div>`;
+          readStatusHtml = `<div class="read-status">${readCount}人已读 / ${totalCount - 1}人</div>`;
         } else {
           readStatusHtml = `<div class="read-status ${isRead ? '' : 'unread'}">${isRead ? '已读' : '未读'}</div>`;
         }
@@ -812,6 +812,7 @@
         if (currentChatGroup && currentChatGroup.group_id === msg.group_id) {
           const who = msg.from_nickname || msg.from_username || msg.from_uid;
           appendChatLine(false, msg.content, msg.send_time, who, true, msg.msg_id);
+          reportGroupRead(msg.group_id, [msg.msg_id]);
         } else {
           unreadCounts[msg.group_id] = (unreadCounts[msg.group_id] || 0) + 1;
           alert('群消息: ' + (msg.group_id || ''));
@@ -851,7 +852,7 @@
             setTimeout(() => {
               msgEl.style.backgroundColor = '';
             }, 500);
-            readStatusEl.textContent = `${readCount}人已读 / ${totalCount}人`;
+            readStatusEl.textContent = `${readCount}人已读 / ${totalCount - 1}人`;
             readStatusEl.classList.remove('unread');
           }
           break;

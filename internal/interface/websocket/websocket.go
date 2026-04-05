@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -86,15 +87,17 @@ type Message struct {
 }
 
 type WSMessage struct {
-	Type      string   `json:"type"`
-	MsgID     string   `json:"msg_id,omitempty"`
-	FromUID   string   `json:"from_uid,omitempty"`
-	ToUID     string   `json:"to_uid,omitempty"`
-	RoomID    string   `json:"room_id,omitempty"`
-	GroupID   string   `json:"group_id,omitempty"`
-	Content   string   `json:"content,omitempty"`
-	MsgIDs    []string `json:"msg_ids,omitempty"`
-	Timestamp int64    `json:"timestamp,omitempty"`
+	Type    string `json:"type"`
+	MsgID   string `json:"msg_id,omitempty"`
+	FromUID string `json:"from_uid,omitempty"`
+	ToUID   string `json:"to_uid,omitempty"`
+	RoomID  string `json:"room_id,omitempty"`
+	GroupID string `json:"group_id,omitempty"`
+	Content string `json:"content,omitempty"`
+
+	MsgIDs []string `json:"msg_ids,omitempty"`
+
+	Timestamp int64 `json:"timestamp,omitempty"`
 }
 
 func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
@@ -422,6 +425,7 @@ func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
 
 	for _, msgID := range msg.MsgIDs {
 		cache.AddMsgRead(msgID, c.UserID)
+		fmt.Println("测试群聊消息流向========================：", msgID, c.UserID, c.Username)
 		cache.AddMsgReadPending(msgID, readTime)
 	}
 
