@@ -28,20 +28,28 @@
 
 ## 快速启动
 
-### 1. 配置环境
+### 1. 初始化依赖目录
+
+```bash
+mkdir -p ./components/redis/data
+mkdir -p ./components/mysql/data
+chmod -R 777 ./components
+```
+
+### 2. 启动依赖服务
+
+```bash
+docker-compose up -d
+```
+
+### 3. 配置环境
 
 ```bash
 cp config/config.example.yaml config/config.yaml
 # 编辑 config.yaml，填写数据库、Redis、Kafka 等配置
 ```
 
-### 2. 启动依赖服务
-
-```bash
-docker-compose -f scripts/docker-compose.yml up -d
-```
-
-### 3. 启动服务
+### 4. 启动服务
 
 ```bash
 # 后端服务
