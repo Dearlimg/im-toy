@@ -10,14 +10,17 @@ import (
 )
 
 var RDB *redis.Client
-var ctx = context.Background()
+var Cache *redisCache
 
 func InitRedis(cfg *config.RedisConfig) error {
 	RDB = redis.NewClient(&redis.Options{
-		Addr:     cfg.Addr(),
-		Password: cfg.Password,
-		DB:       cfg.DB,
-		PoolSize: 10,
+		Addr:         cfg.Addr(),
+		Password:     cfg.Password,
+		DB:           cfg.DB,
+		PoolSize:     100,
+		MinIdleConns: 20,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -28,12 +31,17 @@ func InitRedis(cfg *config.RedisConfig) error {
 		return err
 	}
 
+	Cache = newRedisCache(RDB)
 	log.Println("Redis connected successfully")
 	return nil
 }
 
 func GetRedis() *redis.Client {
 	return RDB
+}
+
+func GetCache() *redisCache {
+	return Cache
 }
 
 func Set(key string, value interface{}, expiration time.Duration) error {

@@ -11,9 +11,15 @@ import (
 	"im-chat/internal/infra/database"
 	"im-chat/internal/infra/idgen"
 	"im-chat/internal/infra/jwt"
+	"im-chat/internal/infra/redis"
 	infra_repo "im-chat/internal/infra/repository"
 
 	"github.com/gorilla/websocket"
+)
+
+const (
+	HeartbeatInterval = 30 * time.Second
+	MsgRateLimit      = 60
 )
 
 var upgrader = websocket.Upgrader{
@@ -62,37 +68,19 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	room := r.URL.Query().Get("room")
 	token := r.URL.Query().Get("token")
 
-	log.Printf("WebSocket connection attempt - room: %s, token: %s", room, func() string {
-		if len(token) > 20 {
-			return token[:20] + "..."
-		}
-		return token
-	}())
-
-	if room == "" {
-		log.Println("WebSocket error: room parameter missing")
-		http.Error(w, "Room parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	if token == "" {
-		log.Println("WebSocket error: token parameter missing")
-		http.Error(w, "Token parameter is required", http.StatusUnauthorized)
+	if room == "" || token == "" {
+		http.Error(w, "Room and token are required", http.StatusBadRequest)
 		return
 	}
 
 	claims, err := jwt.ParseToken(token)
 	if err != nil {
-		log.Printf("WebSocket error: invalid token - %v", err)
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
 	}
 
-	log.Printf("WebSocket token valid, uid: %s", claims.UID)
-
 	var user entity.User
 	if err := database.DB.Where("uid = ?", claims.UID).First(&user).Error; err != nil {
-		log.Printf("WebSocket error: user not found - %v", err)
 		http.Error(w, "User not found", http.StatusUnauthorized)
 		return
 	}
@@ -121,10 +109,43 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	userConns[user.UID] = conn
 	mu.Unlock()
 
-	log.Printf("User %s joined room: %s, total users: %d", user.Username, room, len(rooms[room]))
+	if redis.Cache != nil {
+		cache := redis.Cache
+		cache.SetUserOnline(user.UID)
+		cache.SetConn(user.UID, &redis.ConnInfo{
+			UID:     user.UID,
+			Server:  "single",
+			RoomID:  room,
+			LoginAt: time.Now().Unix(),
+		})
+		cache.SetUserInfo(user.UID, &redis.UserBasicInfo{
+			UID:      user.UID,
+			Username: user.Username,
+			Nickname: user.Nickname,
+			Avatar:   user.Avatar,
+		})
+	}
+
+	log.Printf("User %s joined room: %s", user.Username, room)
 
 	go conn.writePump()
+	go conn.heartbeat()
 	conn.readPump()
+}
+
+func (c *Conn) heartbeat() {
+	ticker := time.NewTicker(HeartbeatInterval)
+	defer ticker.Stop()
+
+	for !c.Closed {
+		<-ticker.C
+		if c.Closed {
+			break
+		}
+		if redis.Cache != nil {
+			redis.Cache.RefreshUserOnline(c.UserID)
+		}
+	}
 }
 
 func (c *Conn) readPump() {
@@ -141,11 +162,8 @@ func (c *Conn) readPump() {
 			break
 		}
 
-		log.Printf("Received message from %s: %s", c.Username, message)
-
 		var wsMsg WSMessage
 		if err := json.Unmarshal(message, &wsMsg); err != nil {
-			log.Printf("Failed to unmarshal WebSocket message: %v", err)
 			continue
 		}
 
@@ -158,35 +176,164 @@ func (c *Conn) readPump() {
 			handleReadReceipt(c, &wsMsg)
 		case "group_read_receipt":
 			handleGroupReadReceipt(c, &wsMsg)
+		case "heartbeat":
+			c.LastBeat = time.Now()
+			sendHeartbeatAck(c)
 		default:
 			handleRoomMessage(c, message)
 		}
 	}
 }
 
-func handleReadReceipt(c *Conn, msg *WSMessage) {
-	if msg.MsgID == "" {
-		log.Printf("Invalid read receipt: %+v", msg)
+func sendHeartbeatAck(c *Conn) {
+	ack := map[string]interface{}{
+		"type": "heartbeat_ack",
+		"ts":   time.Now().UnixMilli(),
+	}
+	data, _ := json.Marshal(ack)
+	select {
+	case c.SendChan <- data:
+	default:
+	}
+}
+
+func handlePrivateMessage(c *Conn, msg *WSMessage) {
+	if msg.ToUID == "" || msg.Content == "" {
 		return
 	}
 
-	log.Printf("Received read receipt from %s for msg: %s", c.Username, msg.MsgID)
+	if redis.Cache != nil {
+		count, _ := redis.Cache.IncrMsgLimit(c.UserID)
+		if count > MsgRateLimit {
+			log.Printf("Rate limit exceeded for user: %s", c.UserID)
+			return
+		}
+	}
 
-	readRepo := infra_repo.NewUserRoomReadRepository()
-	lastReadTime := time.Now().UnixMilli()
+	msgID := idgen.Gen.NextUID()
+	sendTime := time.Now().UnixMilli()
+
+	newMsg := &entity.PrivateMessage{
+		MsgID:    msgID,
+		FromUID:  c.UserID,
+		ToUID:    msg.ToUID,
+		Content:  msg.Content,
+		Type:     1,
+		SendTime: sendTime,
+		Read:     0,
+	}
+
+	msgRepo := infra_repo.NewPrivateMessageRepository()
+	if err := msgRepo.Create(newMsg); err != nil {
+		log.Printf("Failed to save private message: %v", err)
+		return
+	}
+
+	wsMsg := map[string]interface{}{
+		"type":      "private_message",
+		"msg_id":    newMsg.MsgID,
+		"from_uid":  c.UserID,
+		"to_uid":    msg.ToUID,
+		"content":   msg.Content,
+		"send_time": sendTime,
+	}
+
+	if redis.Cache != nil {
+		userInfo, _ := redis.Cache.GetUserInfo(c.UserID)
+		if userInfo != nil {
+			wsMsg["from_username"] = userInfo.Username
+			wsMsg["from_nickname"] = userInfo.Nickname
+		}
+	}
+
+	SendToUser(msg.ToUID, wsMsg)
+	SendToUser(c.UserID, wsMsg)
+}
+
+func handleGroupMessage(c *Conn, msg *WSMessage) {
+	if msg.GroupID == "" || msg.Content == "" {
+		return
+	}
+
+	groupRepo := infra_repo.NewGroupRepository()
+	if _, err := groupRepo.FindMember(msg.GroupID, c.UserID); err != nil {
+		return
+	}
+
+	msgID := idgen.GenerateMsgID()
+	sendTime := time.Now().UnixMilli()
+
+	newMsg := &entity.GroupMessage{
+		MsgID:    msgID,
+		GroupID:  msg.GroupID,
+		FromUID:  c.UserID,
+		Content:  msg.Content,
+		Type:     2,
+		SendTime: sendTime,
+	}
+
+	if err := groupRepo.CreateMessage(newMsg); err != nil {
+		return
+	}
+
+	wsPayload := map[string]interface{}{
+		"type":      "group_message",
+		"msg_id":    newMsg.MsgID,
+		"group_id":  msg.GroupID,
+		"from_uid":  c.UserID,
+		"content":   msg.Content,
+		"send_time": sendTime,
+	}
+
+	if redis.Cache != nil {
+		userInfo, _ := redis.Cache.GetUserInfo(c.UserID)
+		if userInfo != nil {
+			wsPayload["from_username"] = userInfo.Username
+			wsPayload["from_nickname"] = userInfo.Nickname
+		}
+	}
+
+	var members []string
+	if redis.Cache != nil {
+		members, _ = redis.Cache.GetGroupMembers(msg.GroupID)
+	}
+
+	if len(members) == 0 {
+		dbMembers, _ := groupRepo.FindMembersByGroupID(msg.GroupID)
+		members = make([]string, 0, len(dbMembers))
+		for _, m := range dbMembers {
+			members = append(members, m.UID)
+		}
+		if redis.Cache != nil && len(members) > 0 {
+			redis.Cache.SetGroupMembers(msg.GroupID, members)
+		}
+	}
+
+	wsPayload["total_count"] = len(members)
+
+	msgBytes, _ := json.Marshal(wsPayload)
+	for _, m := range members {
+		SendBytesToUser(m, msgBytes)
+	}
+}
+
+func handleReadReceipt(c *Conn, msg *WSMessage) {
+	if msg.MsgID == "" {
+		return
+	}
 
 	roomID := msg.RoomID
 	if roomID == "" && msg.FromUID != "" {
 		roomID = msg.FromUID
 	}
 	if roomID == "" {
-		log.Printf("Read receipt missing room_id or from_uid")
 		return
 	}
 
-	if err := readRepo.Upsert(c.UserID, roomID, msg.MsgID, lastReadTime); err != nil {
-		log.Printf("Failed to save read receipt: %v", err)
-	}
+	lastReadTime := time.Now().UnixMilli()
+
+	readRepo := infra_repo.NewUserRoomReadRepository()
+	readRepo.Upsert(c.UserID, roomID, msg.MsgID, lastReadTime)
 
 	receipt := map[string]interface{}{
 		"type":      "read_receipt",
@@ -199,18 +346,14 @@ func handleReadReceipt(c *Conn, msg *WSMessage) {
 	var targetMsg entity.PrivateMessage
 	if err := database.DB.Where("msg_id = ?", msg.MsgID).First(&targetMsg).Error; err == nil && targetMsg.FromUID != c.UserID {
 		receiptBytes, _ := json.Marshal(receipt)
-		log.Printf("Pushing read receipt to sender: %s", targetMsg.FromUID)
-		BroadcastToUser(targetMsg.FromUID, receiptBytes)
+		SendBytesToUser(targetMsg.FromUID, receiptBytes)
 	}
 }
 
 func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
 	if msg.GroupID == "" || len(msg.MsgIDs) == 0 {
-		log.Printf("Invalid group read receipt: %+v", msg)
 		return
 	}
-
-	log.Printf("Received group read receipt from %s for group: %s, count: %d", c.Username, msg.GroupID, len(msg.MsgIDs))
 
 	readTime := time.Now().UnixMilli()
 	readRepo := infra_repo.NewMessageReadRepository()
@@ -225,14 +368,9 @@ func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
 		})
 	}
 
-	if err := readRepo.BatchCreate(messageReads); err != nil {
-		log.Printf("Failed to batch create group read receipt: %v", err)
-	}
+	readRepo.BatchCreate(messageReads)
 
-	members, err := groupRepo.FindMembersByGroupID(msg.GroupID)
-	if err != nil {
-		log.Printf("Failed to get group members: %v", err)
-	}
+	members, _ := groupRepo.FindMembersByGroupID(msg.GroupID)
 	totalCount := len(members)
 
 	for _, msgID := range msg.MsgIDs {
@@ -250,7 +388,7 @@ func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
 				"read_time":   readTime,
 			}
 			receiptBytes, _ := json.Marshal(receipt)
-			BroadcastToUser(groupMsg.FromUID, receiptBytes)
+			SendBytesToUser(groupMsg.FromUID, receiptBytes)
 		}
 	}
 }
@@ -286,131 +424,32 @@ func handleRoomMessage(c *Conn, message []byte) {
 	mu.Unlock()
 }
 
-func handlePrivateMessage(c *Conn, msg *WSMessage) {
-	if msg.ToUID == "" || msg.Content == "" {
-		log.Printf("Invalid private message: %+v", msg)
+func SendToUser(uid string, msg map[string]interface{}) {
+	data, err := json.Marshal(msg)
+	if err != nil {
 		return
 	}
-
-	msgID := idgen.Gen.NextUID()
-	sendTime := time.Now().UnixMilli()
-
-	newMsg := &entity.PrivateMessage{
-		MsgID:    msgID,
-		FromUID:  c.UserID,
-		ToUID:    msg.ToUID,
-		Content:  msg.Content,
-		Type:     1,
-		SendTime: sendTime,
-		Read:     0,
-	}
-
-	msgRepo := infra_repo.NewPrivateMessageRepository()
-	if err := msgRepo.Create(newMsg); err != nil {
-		log.Printf("Failed to save private message: %v", err)
-		return
-	}
-
-	var fromUser entity.User
-	if err := database.DB.Where("uid = ?", c.UserID).First(&fromUser).Error; err != nil {
-		fromUser.Username = "未知用户"
-		fromUser.Nickname = "未知用户"
-	}
-
-	wsMsg := map[string]interface{}{
-		"type":          "private_message",
-		"msg_id":        newMsg.MsgID,
-		"from_uid":      c.UserID,
-		"from_username": fromUser.Username,
-		"from_nickname": fromUser.Nickname,
-		"to_uid":        msg.ToUID,
-		"content":       msg.Content,
-		"send_time":     sendTime,
-	}
-
-	SendPrivateMessage(msg.ToUID, wsMsg)
-	SendPrivateMessage(c.UserID, wsMsg)
-	log.Printf("Private message saved and sent: from=%s to=%s", c.UserID, msg.ToUID)
+	SendBytesToUser(uid, data)
 }
 
-func handleGroupMessage(c *Conn, msg *WSMessage) {
-	if msg.GroupID == "" || msg.Content == "" {
-		log.Printf("Invalid group message: %+v", msg)
-		return
+func SendBytesToUser(uid string, msgBytes []byte) {
+	if redis.Cache != nil {
+		online, _ := redis.Cache.IsUserOnline(uid)
+		if !online {
+			return
+		}
 	}
 
-	groupRepo := infra_repo.NewGroupRepository()
-	if _, err := groupRepo.FindMember(msg.GroupID, c.UserID); err != nil {
-		log.Printf("group message denied: not a member group=%s uid=%s", msg.GroupID, c.UserID)
-		return
-	}
-
-	msgID := idgen.GenerateMsgID()
-	sendTime := time.Now().UnixMilli()
-
-	newMsg := &entity.GroupMessage{
-		MsgID:    msgID,
-		GroupID:  msg.GroupID,
-		FromUID:  c.UserID,
-		Content:  msg.Content,
-		Type:     2,
-		SendTime: sendTime,
-	}
-
-	if err := groupRepo.CreateMessage(newMsg); err != nil {
-		log.Printf("Failed to save group message: %v", err)
-		return
-	}
-
-	var fromUser entity.User
-	if err := database.DB.Where("uid = ?", c.UserID).First(&fromUser).Error; err != nil {
-		fromUser.Username = "未知用户"
-		fromUser.Nickname = "未知用户"
-	}
-
-	members, err := groupRepo.FindMembersByGroupID(msg.GroupID)
-	if err != nil {
-		log.Printf("Failed to list group members: %v", err)
-		return
-	}
-	totalCount := len(members)
-
-	wsPayload := map[string]interface{}{
-		"type":          "group_message",
-		"msg_id":        newMsg.MsgID,
-		"group_id":      msg.GroupID,
-		"from_uid":      c.UserID,
-		"from_username": fromUser.Username,
-		"from_nickname": fromUser.Nickname,
-		"content":       msg.Content,
-		"send_time":     sendTime,
-		"total_count":   totalCount,
-	}
-
-	msgBytes, err := json.Marshal(wsPayload)
-	if err != nil {
-		log.Printf("Failed to marshal group message: %v", err)
-		return
-	}
-
-	for _, m := range members {
-		sendBytesToUser(m.UID, msgBytes)
-	}
-	log.Printf("Group message broadcast: group=%s from=%s members=%d", msg.GroupID, c.UserID, len(members))
-}
-
-func sendBytesToUser(uid string, msgBytes []byte) {
 	mu.Lock()
 	conn, exists := userConns[uid]
 	mu.Unlock()
 
-	if !exists || conn == nil || conn.Closed {
-		return
-	}
-	select {
-	case conn.SendChan <- msgBytes:
-	default:
-		log.Printf("send queue full for uid=%s", uid)
+	if exists && !conn.Closed {
+		select {
+		case conn.SendChan <- msgBytes:
+		default:
+			log.Printf("send queue full for uid=%s", uid)
+		}
 	}
 }
 
@@ -447,45 +486,13 @@ func (c *Conn) cleanup() {
 		close(c.SendChan)
 		delete(rooms[c.RoomID], c)
 		delete(userConns, c.UserID)
+
+		if redis.Cache != nil {
+			cache := redis.Cache
+			cache.SetUserOffline(c.UserID)
+			cache.RemoveConn(c.UserID)
+		}
+
 		log.Printf("User %s left room: %s", c.Username, c.RoomID)
-	}
-}
-
-func SendPrivateMessage(toUID string, msg map[string]interface{}) {
-	msgBytes, err := json.Marshal(msg)
-	if err != nil {
-		log.Printf("Failed to marshal private message: %v", err)
-		return
-	}
-
-	log.Printf("Attempting to send private message to user: %s", toUID)
-
-	mu.Lock()
-	conn, exists := userConns[toUID]
-	log.Printf("User %s exists in connections: %v, closed: %v", toUID, exists, exists && conn != nil && conn.Closed)
-	mu.Unlock()
-
-	if exists && conn != nil && !conn.Closed {
-		select {
-		case conn.SendChan <- msgBytes:
-			log.Printf("✅ Private message sent to user: %s", toUID)
-		default:
-			log.Printf("❌ Failed to send private message to %s: send chan full", toUID)
-		}
-	} else {
-		log.Printf("❌ User %s is not connected, cannot send private message", toUID)
-	}
-}
-
-func BroadcastToUser(uid string, msg []byte) {
-	mu.Lock()
-	conn, exists := userConns[uid]
-	mu.Unlock()
-
-	if exists && !conn.Closed {
-		select {
-		case conn.SendChan <- msg:
-		default:
-		}
 	}
 }

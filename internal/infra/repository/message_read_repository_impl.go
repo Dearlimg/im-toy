@@ -26,6 +26,33 @@ func (r *MessageReadRepositoryImpl) GetReadCount(msgID string) (int64, error) {
 	return count, err
 }
 
+func (r *MessageReadRepositoryImpl) BatchGetReadCount(msgIDs []string) (map[string]int64, error) {
+	if len(msgIDs) == 0 {
+		return make(map[string]int64), nil
+	}
+
+	type Result struct {
+		MsgID string
+		Count int64
+	}
+
+	var results []Result
+	err := database.DB.Model(&entity.MessageRead{}).
+		Select("msg_id, COUNT(*) as count").
+		Where("msg_id IN ?", msgIDs).
+		Group("msg_id").
+		Find(&results).Error
+	if err != nil {
+		return nil, err
+	}
+
+	countMap := make(map[string]int64)
+	for _, r := range results {
+		countMap[r.MsgID] = r.Count
+	}
+	return countMap, nil
+}
+
 func (r *MessageReadRepositoryImpl) IsRead(msgID, uid string) (bool, error) {
 	var count int64
 	err := database.DB.Model(&entity.MessageRead{}).Where("msg_id = ? AND uid = ?", msgID, uid).Count(&count).Error

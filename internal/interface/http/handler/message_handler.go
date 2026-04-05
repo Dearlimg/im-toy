@@ -65,7 +65,7 @@ func (h *MessageHandler) sendReadReceiptToSender(readerUID, roomID, lastReadMsgI
 	}
 
 	receiptBytes, _ := json.Marshal(receipt)
-	ws.BroadcastToUser(msg.FromUID, receiptBytes)
+	ws.SendBytesToUser(msg.FromUID, receiptBytes)
 }
 
 type GetUnreadCountReq struct {

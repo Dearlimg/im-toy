@@ -148,13 +148,17 @@ func (s *GroupServiceImpl) GetGroupMessages(currentUID, groupID string, limit in
 	totalCount := len(members)
 
 	var uids []string
+	msgIDs := make([]string, 0, len(messages))
 	for _, m := range messages {
 		uids = append(uids, m.FromUID)
+		msgIDs = append(msgIDs, m.MsgID)
 	}
 
 	var users []*entity.User
-	if err := database.DB.Where("uid IN ?", uids).Find(&users).Error; err != nil {
-		return nil, errors.New("获取用户信息失败")
+	if len(uids) > 0 {
+		if err := database.DB.Where("uid IN ?", uids).Find(&users).Error; err != nil {
+			return nil, errors.New("获取用户信息失败")
+		}
 	}
 
 	userMap := make(map[string]*entity.User)
@@ -163,12 +167,12 @@ func (s *GroupServiceImpl) GetGroupMessages(currentUID, groupID string, limit in
 	}
 
 	readRepo := infra_repo.NewMessageReadRepository()
+	readCountMap, _ := readRepo.BatchGetReadCount(msgIDs)
 
 	var resp []*dto.GroupMessageResp
 	for i := len(messages) - 1; i >= 0; i-- {
 		m := messages[i]
 		if user, ok := userMap[m.FromUID]; ok {
-			readCount, _ := readRepo.GetReadCount(m.MsgID)
 			resp = append(resp, &dto.GroupMessageResp{
 				MsgID:        m.MsgID,
 				GroupID:      m.GroupID,
@@ -177,7 +181,7 @@ func (s *GroupServiceImpl) GetGroupMessages(currentUID, groupID string, limit in
 				FromNickname: user.Nickname,
 				Content:      m.Content,
 				SendTime:     m.SendTime,
-				ReadCount:    readCount,
+				ReadCount:    readCountMap[m.MsgID],
 				TotalCount:   totalCount,
 			})
 		}

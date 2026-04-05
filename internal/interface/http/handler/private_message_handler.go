@@ -7,7 +7,7 @@ import (
 	"im-chat/internal/infra/idgen"
 	infra_repo "im-chat/internal/infra/repository"
 	"im-chat/internal/interface/http/response"
-	"im-chat/internal/interface/websocket"
+	ws "im-chat/internal/interface/websocket"
 	"log"
 	"strconv"
 	"time"
@@ -83,7 +83,7 @@ func (h *PrivateMessageHandler) SendMessage(c *gin.Context) {
 	}
 
 	log.Printf("About to send WebSocket message to %s: %s", req.ToUID, req.Content)
-	websocket.SendPrivateMessage(req.ToUID, wsMsg)
+	ws.SendToUser(req.ToUID, wsMsg)
 
 	response.Success(c, msg)
 }
