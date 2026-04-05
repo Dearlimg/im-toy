@@ -14,7 +14,6 @@ var readFlusher *ReadStatusFlusher
 type ReadStatusFlusher struct {
 	cache       *redisCache
 	stopCh      chan struct{}
-	batchSize   int64
 	flushPeriod time.Duration
 }
 
@@ -22,7 +21,6 @@ func StartReadStatusFlusher(cache *redisCache) {
 	readFlusher = &ReadStatusFlusher{
 		cache:       cache,
 		stopCh:      make(chan struct{}),
-		batchSize:   100,
 		flushPeriod: 5 * time.Second,
 	}
 	go readFlusher.start()
@@ -51,8 +49,13 @@ func (f *ReadStatusFlusher) start() {
 	}
 }
 
+const (
+	batchSize          = 20
+	maxRecordsPerFlush = 200
+)
+
 func (f *ReadStatusFlusher) flush() {
-	pending, err := f.cache.PopMsgReadPending(f.batchSize)
+	pending, err := f.cache.PopMsgReadPending(batchSize)
 	if err != nil || len(pending) == 0 {
 		return
 	}
@@ -63,6 +66,7 @@ func (f *ReadStatusFlusher) flush() {
 	}
 
 	var messageReads []*entity.MessageRead
+	recordCount := 0
 	for _, msgID := range msgIDs {
 		readers, err := f.cache.GetMsgReaders(msgID)
 		if err != nil || len(readers) == 0 {
@@ -70,16 +74,23 @@ func (f *ReadStatusFlusher) flush() {
 		}
 		readTime := time.Now().UnixMilli()
 		for _, uid := range readers {
+			if recordCount >= maxRecordsPerFlush {
+				break
+			}
 			messageReads = append(messageReads, &entity.MessageRead{
 				MsgID:    msgID,
 				UID:      uid,
 				ReadTime: readTime,
 			})
+			recordCount++
+		}
+		if recordCount >= maxRecordsPerFlush {
+			break
 		}
 	}
 
 	if len(messageReads) > 0 {
-		if err := database.DB.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(messageReads, 100).Error; err != nil {
+		if err := database.DB.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(messageReads, 50).Error; err != nil {
 			log.Printf("ReadStatusFlusher: failed to flush to DB: %v", err)
 			for _, msgID := range msgIDs {
 				f.cache.AddMsgReadPending(msgID, time.Now().UnixMilli())

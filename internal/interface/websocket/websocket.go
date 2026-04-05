@@ -2,7 +2,6 @@ package websocket
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -425,7 +424,6 @@ func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
 
 	for _, msgID := range msg.MsgIDs {
 		cache.AddMsgRead(msgID, c.UserID)
-		fmt.Println("测试群聊消息流向========================：", msgID, c.UserID, c.Username)
 		cache.AddMsgReadPending(msgID, readTime)
 	}
 
