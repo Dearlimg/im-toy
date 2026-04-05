@@ -26,10 +26,29 @@
     .msg .meta { font-size: 12px; color: #666; }
     #chatInputRow { display: flex; padding: 8px; border-top: 1px solid #ddd; gap: 6px; }
     #chatInputRow input { flex: 1; }
-    .friend-item, .group-item { padding: 8px; border: 1px solid #eee; margin: 4px 0; cursor: pointer; }
+    .friend-item, .group-item { padding: 8px; border: 1px solid #eee; margin: 4px 0; cursor: pointer; position: relative; }
     .friend-item.active, .group-item.active { background: #e3f2fd; }
     .item-actions { float: right; }
     .item-actions button { font-size: 12px; padding: 2px 6px; }
+    .unread-badge {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: #ff4d4f;
+      color: white;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      min-width: 18px;
+      text-align: center;
+    }
+    .msg .read-status {
+      font-size: 11px;
+      color: #999;
+      margin-top: 2px;
+    }
+    .msg .read-status.unread { color: #1890ff; font-weight: bold; }
     #authPage { max-width: 400px; margin: 40px auto; }
     .modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 100; }
     .modal.show { display: flex; }
@@ -164,6 +183,8 @@
     let currentChatFriend = null;
     let currentChatGroup = null;
     let ws = null;
+    let roomReadStatus = {}; // 记录每个房间的已读状态
+    let unreadCounts = {}; // 记录每个房间的未读数
 
     function showAuth(which) {
       document.getElementById('loginForm').classList.toggle('hidden', which !== 'login');
@@ -293,14 +314,18 @@
           return;
         }
         friendsCache = j.data || [];
-        el.innerHTML = friendsCache.length ? friendsCache.map(f => `
+        el.innerHTML = friendsCache.length ? friendsCache.map(f => {
+          const unread = unreadCounts[f.friend_uid] || 0;
+          const unreadBadge = unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : '';
+          return `
           <div class="friend-item ${currentChatFriend && currentChatFriend.friend_uid === f.friend_uid ? 'active' : ''}" data-fid="${f.friend_uid}" onclick="selectFriend('${f.friend_uid}')">
             ${esc(f.nickname || f.username)} (${esc(f.username)})
             <span class="item-actions">
               <button type="button" onclick="event.stopPropagation();deleteFriend('${f.friend_uid}')">删</button>
             </span>
+            ${unreadBadge}
           </div>
-        `).join('') : '<div>暂无好友</div>';
+        `}).join('') : '<div>暂无好友</div>';
       } catch (e) {
         el.textContent = '网络错误';
       }
@@ -431,6 +456,39 @@
       document.getElementById('addFriendModal').classList.remove('show');
     }
 
+    async function reportRead(roomId, lastMsgId) {
+      try {
+        await fetch(API + '/message/report-read', {
+          method: 'POST',
+          headers: authHeader(),
+          body: JSON.stringify({
+            room_id: roomId,
+            last_read_msg_id: lastMsgId
+          })
+        });
+        unreadCounts[roomId] = 0;
+        loadFriends();
+      } catch (e) {
+        console.error('上报已读失败', e);
+      }
+    }
+
+    async function getRoomReadStatus(roomId) {
+      try {
+        const res = await fetch(API + '/message/read-status?room_id=' + encodeURIComponent(roomId), {
+          headers: authHeader()
+        });
+        const j = await res.json();
+        if (j.code === 0 && j.data) {
+          roomReadStatus[roomId] = j.data;
+          return j.data;
+        }
+      } catch (e) {
+        console.error('获取已读状态失败', e);
+      }
+      return null;
+    }
+
     function selectFriend(friendUid) {
       currentChatGroup = null;
       const f = friendsCache.find(x => x.friend_uid === friendUid);
@@ -447,16 +505,30 @@
     async function loadPrivateHistory(friendUid) {
       const box = document.getElementById('chatMessages');
       try {
-        const res = await fetch(API + '/private/conversation?friend_uid=' + encodeURIComponent(friendUid), {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
+        const [readStatus, res] = await Promise.all([
+          getRoomReadStatus(friendUid),
+          fetch(API + '/private/conversation?friend_uid=' + encodeURIComponent(friendUid), {
+            headers: { 'Authorization': 'Bearer ' + token }
+          })
+        ]);
         const j = await res.json();
         if (j.code !== 0) {
           box.textContent = j.message || '加载失败';
           return;
         }
         const msgs = j.data || [];
-        box.innerHTML = msgs.map(m => renderMsgLine(m.from_uid === currentUser.uid, m.content, m.send_time, m.from_uid === currentUser.uid ? '我' : (currentChatFriend.nickname || '对方'))).join('');
+        
+        if (msgs.length > 0) {
+          const lastMsg = msgs[msgs.length - 1];
+          reportRead(friendUid, lastMsg.msg_id);
+        }
+
+        box.innerHTML = msgs.map(m => {
+          const isSelf = m.from_uid === currentUser.uid;
+          const who = isSelf ? '我' : (currentChatFriend.nickname || '对方');
+          const isRead = !readStatus || !readStatus.last_read_msg_id || m.msg_id <= readStatus.last_read_msg_id;
+          return renderMsgLine(isSelf, m.content, m.send_time, who, m.is_read || isRead, m.msg_id);
+        }).join('');
         box.scrollTop = box.scrollHeight;
       } catch (e) {
         box.textContent = '网络错误';
@@ -474,12 +546,16 @@
           return;
         }
         groupsCache = j.data || [];
-        const rows = groupsCache.map(g => `
+        const rows = groupsCache.map(g => {
+          const unread = unreadCounts[g.group_id] || 0;
+          const unreadBadge = unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : '';
+          return `
           <div class="group-item ${currentChatGroup && currentChatGroup.group_id === g.group_id ? 'active' : ''}" data-gid="${g.group_id}" onclick="selectGroup('${g.group_id}')">
             ${esc(g.name || g.group_id)}
             <button type="button" onclick="event.stopPropagation();viewGroupMembers('${g.group_id}')">成员</button>
+            ${unreadBadge}
           </div>
-        `).join('');
+        `}).join('');
         el.innerHTML = '<div style="margin-bottom:8px;"><button type="button" onclick="openCreateGroupModal()">+ 创建群</button></div>' +
           (rows || '<div>暂无群</div>');
       } catch (e) {
@@ -520,19 +596,29 @@
     async function loadGroupHistory(groupId) {
       const box = document.getElementById('chatMessages');
       try {
-        const res = await fetch(API + '/group/messages?group_id=' + encodeURIComponent(groupId) + '&limit=50', {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
+        const [readStatus, res] = await Promise.all([
+          getRoomReadStatus(groupId),
+          fetch(API + '/group/messages?group_id=' + encodeURIComponent(groupId) + '&limit=50', {
+            headers: { 'Authorization': 'Bearer ' + token }
+          })
+        ]);
         const j = await res.json();
         if (j.code !== 0) {
           box.textContent = j.message || '加载失败';
           return;
         }
         const msgs = j.data || [];
+        
+        if (msgs.length > 0) {
+          const lastMsg = msgs[msgs.length - 1];
+          reportRead(groupId, lastMsg.msg_id);
+        }
+
         box.innerHTML = msgs.map(m => {
           const self = m.from_uid === currentUser.uid;
           const who = self ? '我' : (m.from_nickname || m.from_username || m.from_uid);
-          return renderMsgLine(self, m.content, m.send_time, who);
+          const isRead = !readStatus || !readStatus.last_read_msg_id || m.msg_id <= readStatus.last_read_msg_id;
+          return renderMsgLine(self, m.content, m.send_time, who, m.is_read || isRead, m.msg_id);
         }).join('');
         box.scrollTop = box.scrollHeight;
       } catch (e) {
@@ -580,11 +666,15 @@
       }
     }
 
-    function renderMsgLine(self, content, sendTime, whoLabel) {
+    function renderMsgLine(self, content, sendTime, whoLabel, isRead, msgId) {
       const t = typeof sendTime === 'number' ? sendTime : parseInt(sendTime, 10);
       const d = new Date(t);
       const timeStr = isNaN(d.getTime()) ? String(sendTime) : d.toLocaleString();
-      return `<div class="msg ${self ? 'self' : ''}"><div class="meta">${esc(whoLabel)} · ${esc(timeStr)}</div><div>${esc(content)}</div></div>`;
+      let readStatusHtml = '';
+      if (self) {
+        readStatusHtml = `<div class="read-status ${isRead ? '' : 'unread'}">${isRead ? '已读' : '未读'}</div>`;
+      }
+      return `<div class="msg ${self ? 'self' : ''}" data-msg-id="${esc(msgId || '')}"><div class="meta">${esc(whoLabel)} · ${esc(timeStr)}</div><div>${esc(content)}</div>${readStatusHtml}</div>`;
     }
 
     function esc(s) {
@@ -610,10 +700,17 @@
     }
 
     function onWsMessage(msg) {
+      if (msg.type === 'read_receipt') {
+        updateMessageReadStatus(msg.msg_id, true);
+        return;
+      }
       if (msg.type === 'private_message') {
         if (currentChatFriend && currentChatFriend.friend_uid === msg.from_uid) {
-          appendChatLine(msg.from_uid === currentUser.uid, msg.content, msg.send_time, msg.from_nickname || msg.from_username || msg.from_uid);
+          appendChatLine(msg.from_uid === currentUser.uid, msg.content, msg.send_time, msg.from_nickname || msg.from_username || msg.from_uid, true, msg.msg_id);
+          reportRead(msg.from_uid, msg.msg_id);
         } else {
+          unreadCounts[msg.from_uid] = (unreadCounts[msg.from_uid] || 0) + 1;
+          loadFriends();
           alert('新私聊: ' + (msg.from_nickname || msg.from_username));
         }
         return;
@@ -622,16 +719,28 @@
         if (currentChatGroup && currentChatGroup.group_id === msg.group_id) {
           const self = msg.from_uid === currentUser.uid;
           const who = self ? '我' : (msg.from_nickname || msg.from_username || msg.from_uid);
-          appendChatLine(self, msg.content, msg.send_time, who);
+          appendChatLine(self, msg.content, msg.send_time, who, true, msg.msg_id);
         } else {
+          unreadCounts[msg.group_id] = (unreadCounts[msg.group_id] || 0) + 1;
           alert('群消息: ' + (msg.group_id || ''));
         }
       }
     }
 
-    function appendChatLine(self, content, sendTime, whoLabel) {
+    function updateMessageReadStatus(msgId, isRead) {
+      const msgEl = document.querySelector(`.msg[data-msg-id="${esc(msgId)}"]`);
+      if (msgEl) {
+        const readStatusEl = msgEl.querySelector('.read-status');
+        if (readStatusEl) {
+          readStatusEl.textContent = isRead ? '已读' : '未读';
+          readStatusEl.classList.toggle('unread', !isRead);
+        }
+      }
+    }
+
+    function appendChatLine(self, content, sendTime, whoLabel, isRead, msgId) {
       const box = document.getElementById('chatMessages');
-      box.insertAdjacentHTML('beforeend', renderMsgLine(self, content, sendTime, whoLabel));
+      box.insertAdjacentHTML('beforeend', renderMsgLine(self, content, sendTime, whoLabel, isRead, msgId));
       box.scrollTop = box.scrollHeight;
     }
 
@@ -654,7 +763,7 @@
           content: content,
           timestamp: Date.now()
         }));
-        appendChatLine(true, content, Date.now(), '我');
+        appendChatLine(true, content, Date.now(), '我', false, '');
         input.value = '';
         return;
       }
@@ -664,7 +773,7 @@
         content: content,
         timestamp: Date.now()
       }));
-      appendChatLine(true, content, Date.now(), '我');
+      appendChatLine(true, content, Date.now(), '我', false, '');
       input.value = '';
     }
 

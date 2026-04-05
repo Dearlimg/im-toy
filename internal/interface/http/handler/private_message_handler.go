@@ -16,12 +16,14 @@ import (
 )
 
 type PrivateMessageHandler struct {
-	msgRepo domain_repo.PrivateMessageRepository
+	msgRepo  domain_repo.PrivateMessageRepository
+	readRepo domain_repo.UserRoomReadRepository
 }
 
 func NewPrivateMessageHandler() *PrivateMessageHandler {
 	return &PrivateMessageHandler{
-		msgRepo: infra_repo.NewPrivateMessageRepository(),
+		msgRepo:  infra_repo.NewPrivateMessageRepository(),
+		readRepo: infra_repo.NewUserRoomReadRepository(),
 	}
 }
 
@@ -122,9 +124,35 @@ func (h *PrivateMessageHandler) GetConversation(c *gin.Context) {
 		return
 	}
 
+	readRecord, _ := h.readRepo.FindByUIDAndRoomID(currentUID, friendUID)
+	var lastReadMsgID string
+	if readRecord != nil {
+		lastReadMsgID = readRecord.LastReadMsgID
+	}
+
+	result := make([]map[string]interface{}, 0, len(messages))
+	for _, msg := range messages {
+		isRead := true
+		if lastReadMsgID != "" {
+			isRead = msg.MsgID <= lastReadMsgID
+		} else {
+			isRead = msg.Read == 1
+		}
+		result = append(result, map[string]interface{}{
+			"msg_id":    msg.MsgID,
+			"from_uid":  msg.FromUID,
+			"to_uid":    msg.ToUID,
+			"content":   msg.Content,
+			"type":      msg.Type,
+			"send_time": msg.SendTime,
+			"read":      isRead,
+			"is_read":   isRead,
+		})
+	}
+
 	_ = h.msgRepo.MarkAsRead(friendUID, currentUID)
 
-	response.Success(c, messages)
+	response.Success(c, result)
 }
 
 func (h *PrivateMessageHandler) GetUnreadCount(c *gin.Context) {

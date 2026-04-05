@@ -23,6 +23,7 @@ func RegisterRoutes(r *gin.Engine) {
 	friendHandler := handler.NewFriendHandler(friendService)
 	groupHandler := handler.NewGroupHandler(groupService)
 	privateMsgHandler := handler.NewPrivateMessageHandler()
+	messageHandler := handler.NewMessageHandler()
 
 	r.Use(middleware.CORS())
 	r.Use(middleware.Recovery())
@@ -60,6 +61,10 @@ func RegisterRoutes(r *gin.Engine) {
 		auth.GET("/group/list", groupHandler.GetGroupList)
 		auth.GET("/group/members", groupHandler.GetGroupMembers)
 		auth.GET("/group/messages", groupHandler.GetGroupMessages)
+
+		auth.POST("/message/report-read", messageHandler.ReportRead)
+		auth.GET("/message/unread-count", messageHandler.GetUnreadCount)
+		auth.GET("/message/read-status", messageHandler.GetRoomReadStatus)
 	}
 
 	r.NoRoute(middleware.NoRoute())

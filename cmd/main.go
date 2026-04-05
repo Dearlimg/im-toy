@@ -49,6 +49,7 @@ func main() {
 		&entity.Group{},
 		&entity.GroupMember{},
 		&entity.GroupMessage{},
+		&entity.UserRoomRead{},
 	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
