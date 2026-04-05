@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"im-chat/internal/apperrors"
 )
 
 type Response struct {
@@ -91,6 +93,14 @@ func InternalError(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{
 		Code:    CodeInternalError,
 		Message: GetMsg(CodeInternalError),
+		Data:    nil,
+	})
+}
+
+func AppError(c *gin.Context, err *apperrors.AppError) {
+	c.JSON(http.StatusOK, Response{
+		Code:    err.Code,
+		Message: err.Msg,
 		Data:    nil,
 	})
 }

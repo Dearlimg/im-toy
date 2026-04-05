@@ -1,11 +1,12 @@
 package impl
 
 import (
-	"errors"
+	"im-chat/internal/apperrors"
 	"im-chat/internal/application/dto"
 	"im-chat/internal/application/service"
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/domain/repository"
+	"im-chat/internal/interface/http/response"
 )
 
 type FriendServiceImpl struct {
@@ -22,20 +23,20 @@ func NewFriendServiceImpl(friendRepo repository.FriendRepository, userRepo repos
 
 func (s *FriendServiceImpl) AddFriend(currentUID string, req *dto.AddFriendReq) error {
 	if currentUID == req.FriendUID {
-		return errors.New("不能添加自己为好友")
+		return apperrors.New(response.CodeCannotAddSelfAsFriend, response.GetMsg(response.CodeCannotAddSelfAsFriend))
 	}
 
 	_, err := s.userRepo.FindByUID(req.FriendUID)
 	if err != nil {
-		return errors.New("用户不存在")
+		return apperrors.New(response.CodeUserNotFound, response.GetMsg(response.CodeUserNotFound))
 	}
 
 	existing, _ := s.friendRepo.FindByUIDAndFriendUID(currentUID, req.FriendUID)
 	if existing != nil {
 		if existing.Status == 1 {
-			return errors.New("已经是好友了")
+			return apperrors.New(response.CodeFriendAlreadyExist, response.GetMsg(response.CodeFriendAlreadyExist))
 		} else if existing.Status == 2 {
-			return errors.New("已发送好友请求，等待对方验证")
+			return apperrors.New(response.CodeFriendRequestSent, response.GetMsg(response.CodeFriendRequestSent))
 		}
 	}
 
@@ -47,7 +48,7 @@ func (s *FriendServiceImpl) AddFriend(currentUID string, req *dto.AddFriendReq) 
 	}
 
 	if err := s.friendRepo.Create(friend); err != nil {
-		return errors.New("添加好友失败")
+		return apperrors.New(response.CodeFriendAddFailed, response.GetMsg(response.CodeFriendAddFailed))
 	}
 
 	return nil
@@ -56,16 +57,16 @@ func (s *FriendServiceImpl) AddFriend(currentUID string, req *dto.AddFriendReq) 
 func (s *FriendServiceImpl) AcceptFriend(currentUID string, req *dto.AcceptFriendReq) error {
 	friend, err := s.friendRepo.FindByUIDAndFriendUID(req.FriendUID, currentUID)
 	if err != nil {
-		return errors.New("好友请求不存在")
+		return apperrors.New(response.CodeFriendRequestNotFound, response.GetMsg(response.CodeFriendRequestNotFound))
 	}
 
 	if friend.Status != 2 {
-		return errors.New("好友请求状态异常")
+		return apperrors.New(response.CodeFriendRequestInvalid, response.GetMsg(response.CodeFriendRequestInvalid))
 	}
 
 	friend.Status = 1
 	if err := s.friendRepo.Update(friend); err != nil {
-		return errors.New("接受好友请求失败")
+		return apperrors.New(response.CodeFriendAcceptFailed, response.GetMsg(response.CodeFriendAcceptFailed))
 	}
 
 	reverseFriend := &entity.Friend{
@@ -74,7 +75,7 @@ func (s *FriendServiceImpl) AcceptFriend(currentUID string, req *dto.AcceptFrien
 		Status:    1,
 	}
 	if err := s.friendRepo.Create(reverseFriend); err != nil {
-		return errors.New("创建好友关系失败")
+		return apperrors.New(response.CodeFriendCreateFailed, response.GetMsg(response.CodeFriendCreateFailed))
 	}
 
 	return nil
@@ -82,10 +83,10 @@ func (s *FriendServiceImpl) AcceptFriend(currentUID string, req *dto.AcceptFrien
 
 func (s *FriendServiceImpl) DeleteFriend(currentUID string, req *dto.DeleteFriendReq) error {
 	if err := s.friendRepo.Delete(currentUID, req.FriendUID); err != nil {
-		return errors.New("删除好友失败")
+		return apperrors.New(response.CodeFriendDeleteFailed, response.GetMsg(response.CodeFriendDeleteFailed))
 	}
 	if err := s.friendRepo.Delete(req.FriendUID, currentUID); err != nil {
-		return errors.New("删除好友失败")
+		return apperrors.New(response.CodeFriendDeleteFailed, response.GetMsg(response.CodeFriendDeleteFailed))
 	}
 	return nil
 }
@@ -93,7 +94,7 @@ func (s *FriendServiceImpl) DeleteFriend(currentUID string, req *dto.DeleteFrien
 func (s *FriendServiceImpl) GetFriendList(currentUID string) ([]*dto.FriendResp, error) {
 	friends, err := s.friendRepo.FindFriendsWithUserInfo(currentUID)
 	if err != nil {
-		return nil, errors.New("获取好友列表失败")
+		return nil, apperrors.New(response.CodeFriendListGetFailed, response.GetMsg(response.CodeFriendListGetFailed))
 	}
 
 	var resp []*dto.FriendResp
@@ -115,7 +116,7 @@ func (s *FriendServiceImpl) GetFriendList(currentUID string) ([]*dto.FriendResp,
 func (s *FriendServiceImpl) GetFriendRequests(currentUID string) ([]*dto.FriendResp, error) {
 	requests, err := s.friendRepo.FindFriendRequests(currentUID)
 	if err != nil {
-		return nil, errors.New("获取好友请求失败")
+		return nil, apperrors.New(response.CodeFriendRequestsGetFailed, response.GetMsg(response.CodeFriendRequestsGetFailed))
 	}
 
 	var resp []*dto.FriendResp
@@ -160,7 +161,7 @@ func getInt(m map[string]interface{}, key string) int {
 func (s *FriendServiceImpl) SearchUser(currentUID string, keyword string) ([]*dto.UserResp, error) {
 	users, err := s.userRepo.SearchUsers(keyword, currentUID, 20)
 	if err != nil {
-		return nil, errors.New("搜索用户失败")
+		return nil, apperrors.New(response.CodeUserSearchFailed, response.GetMsg(response.CodeUserSearchFailed))
 	}
 
 	var resp []*dto.UserResp

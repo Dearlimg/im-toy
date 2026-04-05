@@ -1,12 +1,13 @@
 package impl
 
 import (
-	"errors"
+	"im-chat/internal/apperrors"
 	"im-chat/internal/application/dto"
 	"im-chat/internal/application/service"
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/domain/repository"
 	"im-chat/internal/infra/idgen"
+	"im-chat/internal/interface/http/response"
 )
 
 type GroupServiceImpl struct {
@@ -35,7 +36,7 @@ func (s *GroupServiceImpl) CreateGroup(currentUID string, req *dto.CreateGroupRe
 	}
 
 	if err := s.groupRepo.CreateGroup(group); err != nil {
-		return nil, errors.New("创建群聊失败")
+		return nil, apperrors.New(response.CodeGroupCreateFailed, response.GetMsg(response.CodeGroupCreateFailed))
 	}
 
 	owner := &entity.GroupMember{
@@ -45,7 +46,7 @@ func (s *GroupServiceImpl) CreateGroup(currentUID string, req *dto.CreateGroupRe
 		Status:  1,
 	}
 	if err := s.groupRepo.AddMember(owner); err != nil {
-		return nil, errors.New("添加群主失败")
+		return nil, apperrors.New(response.CodeGroupAddOwnerFailed, response.GetMsg(response.CodeGroupAddOwnerFailed))
 	}
 
 	for _, uid := range req.MemberUIDs {
@@ -75,7 +76,7 @@ func (s *GroupServiceImpl) CreateGroup(currentUID string, req *dto.CreateGroupRe
 func (s *GroupServiceImpl) GetGroupList(currentUID string) ([]*dto.GroupResp, error) {
 	groups, err := s.groupRepo.FindGroupsByUID(currentUID)
 	if err != nil {
-		return nil, errors.New("获取群聊列表失败")
+		return nil, apperrors.New(response.CodeGroupCreateFailed, response.GetMsg(response.CodeGroupCreateFailed))
 	}
 
 	var resp []*dto.GroupResp
@@ -94,12 +95,12 @@ func (s *GroupServiceImpl) GetGroupList(currentUID string) ([]*dto.GroupResp, er
 
 func (s *GroupServiceImpl) GetGroupMembers(currentUID, groupID string) ([]*dto.GroupMemberResp, error) {
 	if _, err := s.groupRepo.FindMember(groupID, currentUID); err != nil {
-		return nil, errors.New("无权查看该群或您不是群成员")
+		return nil, apperrors.New(response.CodeGroupUnauthorized, response.GetMsg(response.CodeGroupUnauthorized))
 	}
 
 	members, err := s.groupRepo.FindMembersByGroupID(groupID)
 	if err != nil {
-		return nil, errors.New("获取群成员失败")
+		return nil, apperrors.New(response.CodeGroupMemberGetFailed, response.GetMsg(response.CodeGroupMemberGetFailed))
 	}
 
 	var uids []string
@@ -109,7 +110,7 @@ func (s *GroupServiceImpl) GetGroupMembers(currentUID, groupID string) ([]*dto.G
 
 	users, err := s.userRepo.FindByUIDs(uids)
 	if err != nil {
-		return nil, errors.New("获取用户信息失败")
+		return nil, apperrors.New(response.CodeGroupUserInfoGetFailed, response.GetMsg(response.CodeGroupUserInfoGetFailed))
 	}
 
 	userMap := make(map[string]*entity.User)
@@ -135,17 +136,17 @@ func (s *GroupServiceImpl) GetGroupMembers(currentUID, groupID string) ([]*dto.G
 
 func (s *GroupServiceImpl) GetGroupMessages(currentUID, groupID string, limit int) ([]*dto.GroupMessageResp, error) {
 	if _, err := s.groupRepo.FindMember(groupID, currentUID); err != nil {
-		return nil, errors.New("无权查看该群消息或您不是群成员")
+		return nil, apperrors.New(response.CodeGroupUnauthorized, response.GetMsg(response.CodeGroupUnauthorized))
 	}
 
 	messages, err := s.groupRepo.FindMessagesByGroupID(groupID, limit)
 	if err != nil {
-		return nil, errors.New("获取群消息失败")
+		return nil, apperrors.New(response.CodeGroupMessageGetFailed, response.GetMsg(response.CodeGroupMessageGetFailed))
 	}
 
 	members, err := s.groupRepo.FindMembersByGroupID(groupID)
 	if err != nil {
-		return nil, errors.New("获取群成员失败")
+		return nil, apperrors.New(response.CodeGroupMemberGetFailed, response.GetMsg(response.CodeGroupMemberGetFailed))
 	}
 	totalCount := len(members)
 
@@ -160,7 +161,7 @@ func (s *GroupServiceImpl) GetGroupMessages(currentUID, groupID string, limit in
 	if len(uids) > 0 {
 		users, err = s.userRepo.FindByUIDs(uids)
 		if err != nil {
-			return nil, errors.New("获取用户信息失败")
+			return nil, apperrors.New(response.CodeGroupUserInfoGetFailed, response.GetMsg(response.CodeGroupUserInfoGetFailed))
 		}
 	}
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"im-chat/internal/apperrors"
 	"im-chat/internal/application/dto"
 	"im-chat/internal/application/service"
 	"im-chat/internal/interface/http/response"
@@ -31,7 +32,11 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 
 	resp, err := h.groupService.CreateGroup(currentUID, &req)
 	if err != nil {
-		response.Failed(c, err.Error())
+		if appErr, ok := apperrors.FromError(err); ok {
+			response.AppError(c, appErr)
+		} else {
+			response.Failed(c, err.Error())
+		}
 		return
 	}
 
@@ -44,7 +49,11 @@ func (h *GroupHandler) GetGroupList(c *gin.Context) {
 
 	resp, err := h.groupService.GetGroupList(currentUID)
 	if err != nil {
-		response.Failed(c, err.Error())
+		if appErr, ok := apperrors.FromError(err); ok {
+			response.AppError(c, appErr)
+		} else {
+			response.Failed(c, err.Error())
+		}
 		return
 	}
 
@@ -63,7 +72,11 @@ func (h *GroupHandler) GetGroupMembers(c *gin.Context) {
 
 	resp, err := h.groupService.GetGroupMembers(currentUID, groupID)
 	if err != nil {
-		response.Failed(c, err.Error())
+		if appErr, ok := apperrors.FromError(err); ok {
+			response.AppError(c, appErr)
+		} else {
+			response.Failed(c, err.Error())
+		}
 		return
 	}
 
@@ -90,7 +103,11 @@ func (h *GroupHandler) GetGroupMessages(c *gin.Context) {
 
 	resp, err := h.groupService.GetGroupMessages(currentUID, groupID, limit)
 	if err != nil {
-		response.Failed(c, err.Error())
+		if appErr, ok := apperrors.FromError(err); ok {
+			response.AppError(c, appErr)
+		} else {
+			response.Failed(c, err.Error())
+		}
 		return
 	}
 

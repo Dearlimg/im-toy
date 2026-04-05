@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"im-chat/internal/apperrors"
 	"im-chat/internal/application/dto"
 	"im-chat/internal/application/service"
 	"im-chat/internal/interface/http/response"
@@ -27,7 +28,11 @@ func (h *UserHandler) Register(c *gin.Context) {
 
 	resp, err := h.userService.Register(&req)
 	if err != nil {
-		response.Failed(c, err.Error())
+		if appErr, ok := apperrors.FromError(err); ok {
+			response.AppError(c, appErr)
+		} else {
+			response.Failed(c, err.Error())
+		}
 		return
 	}
 
@@ -43,7 +48,11 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 	resp, err := h.userService.Login(&req)
 	if err != nil {
-		response.Failed(c, err.Error())
+		if appErr, ok := apperrors.FromError(err); ok {
+			response.AppError(c, appErr)
+		} else {
+			response.Failed(c, err.Error())
+		}
 		return
 	}
 

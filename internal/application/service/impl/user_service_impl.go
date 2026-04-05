@@ -1,13 +1,14 @@
 package impl
 
 import (
-	"errors"
+	"im-chat/internal/apperrors"
 	"im-chat/internal/application/dto"
 	"im-chat/internal/application/service"
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/domain/repository"
 	"im-chat/internal/infra/idgen"
 	"im-chat/internal/infra/jwt"
+	"im-chat/internal/interface/http/response"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -25,12 +26,12 @@ func NewUserServiceImpl(userRepo repository.UserRepository) service.UserService 
 func (s *UserServiceImpl) Register(req *dto.UserRegisterReq) (*dto.UserLoginResp, error) {
 	existingUser, _ := s.userRepo.FindByUsername(req.Username)
 	if existingUser != nil {
-		return nil, errors.New("用户名已存在")
+		return nil, apperrors.New(response.CodeUserAlreadyExist, response.GetMsg(response.CodeUserAlreadyExist))
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, errors.New("密码加密失败")
+		return nil, apperrors.New(response.CodePasswordHashFailed, response.GetMsg(response.CodePasswordHashFailed))
 	}
 
 	uid := idgen.Gen.NextUID()
@@ -43,12 +44,12 @@ func (s *UserServiceImpl) Register(req *dto.UserRegisterReq) (*dto.UserLoginResp
 	}
 
 	if err := s.userRepo.Create(user); err != nil {
-		return nil, errors.New("注册失败")
+		return nil, apperrors.New(response.CodeUserRegisterFailed, response.GetMsg(response.CodeUserRegisterFailed))
 	}
 
 	token, err := jwt.GenerateToken(uid)
 	if err != nil {
-		return nil, errors.New("生成Token失败")
+		return nil, apperrors.New(response.CodeTokenGenerateFailed, response.GetMsg(response.CodeTokenGenerateFailed))
 	}
 
 	return &dto.UserLoginResp{
@@ -65,20 +66,20 @@ func (s *UserServiceImpl) Register(req *dto.UserRegisterReq) (*dto.UserLoginResp
 func (s *UserServiceImpl) Login(req *dto.UserLoginReq) (*dto.UserLoginResp, error) {
 	user, err := s.userRepo.FindByUsername(req.Username)
 	if err != nil {
-		return nil, errors.New("用户不存在")
+		return nil, apperrors.New(response.CodeUserNotFound, response.GetMsg(response.CodeUserNotFound))
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return nil, errors.New("密码错误")
+		return nil, apperrors.New(response.CodeWrongPassword, response.GetMsg(response.CodeWrongPassword))
 	}
 
 	if user.Status != 1 {
-		return nil, errors.New("账号已被禁用")
+		return nil, apperrors.New(response.CodeUserDisabled, response.GetMsg(response.CodeUserDisabled))
 	}
 
 	token, err := jwt.GenerateToken(user.UID)
 	if err != nil {
-		return nil, errors.New("生成Token失败")
+		return nil, apperrors.New(response.CodeTokenGenerateFailed, response.GetMsg(response.CodeTokenGenerateFailed))
 	}
 
 	return &dto.UserLoginResp{
