@@ -22,13 +22,14 @@
 │   ├── infra/           # 基础设施层（Repository 实现、Kafka、Redis、数据库）
 │   └── interface/      # 接口层（HTTP Handler、WebSocket）
 ├── public/              # 前端静态资源
-├── scripts/             # Docker Compose 文件
 └── docs/                # API 文档
 ```
 
 ## 快速启动
 
-### 1. 初始化依赖目录
+### 方式一：本地开发
+
+#### 1. 初始化依赖目录
 
 ```bash
 mkdir -p ./components/redis/data
@@ -36,20 +37,20 @@ mkdir -p ./components/mysql/data
 chmod -R 777 ./components
 ```
 
-### 2. 启动依赖服务
+#### 2. 启动依赖服务
 
 ```bash
 docker-compose up -d
 ```
 
-### 3. 配置环境
+#### 3. 配置环境
 
 ```bash
 cp config/config.example.yaml config/config.yaml
 # 编辑 config.yaml，填写数据库、Redis、Kafka 等配置
 ```
 
-### 4. 启动服务
+#### 4. 启动服务
 
 ```bash
 # 后端服务
@@ -60,6 +61,37 @@ go run cmd/frontend/main.go
 ```
 
 访问 `http://localhost:8080` 即可使用。
+
+### 方式二：Docker 部署（推荐生产环境）
+
+#### 1. 构建镜像
+
+```bash
+# 构建后端镜像
+docker build -t im-chat-backend:latest .
+
+# 构建前端镜像
+docker build -t im-chat-frontend:latest -f cmd/frontend/Dockerfile-frontend .
+```
+
+#### 2. 启动服务
+
+```bash
+# 启动所有服务
+docker-compose up -d
+```
+
+访问 `http://localhost:3000` 即可使用。
+
+#### 单独启动前端
+
+```bash
+docker run -d \
+  --name im-frontend \
+  -p 3000:80 \
+  -e BACKEND_URL=http://backend:8080 \
+  im-chat-frontend:latest
+```
 
 ## 核心特性
 
