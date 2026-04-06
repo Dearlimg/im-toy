@@ -20,18 +20,10 @@ WORKDIR /app
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
     apk add --no-cache ca-certificates tzdata
 
-# 复制程序
+# 复制程序和静态文件
 COPY --from=builder /app/im-chat .
-
-# 【关键】手动创建 config 文件夹，再复制文件！
-RUN mkdir -p /app/config
-COPY --from=builder /app/config/config.yaml /app/config/config.yaml
-
-# 权限
-RUN chmod -R 755 /app
-
-# 不用非root用户，避免权限坑（先跑起来再说）
-# USER appuser
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/config/config.yaml ./config/config.yaml
 
 EXPOSE 8080
 CMD ["./im-chat"]

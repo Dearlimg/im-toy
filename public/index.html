@@ -91,14 +91,14 @@
         <button type="button" id="tabReg" onclick="showAuth('register')">注册</button>
       </div>
       <div id="loginForm">
-        <p>用户名 <input id="loginUsername" autocomplete="username"></p>
-        <p>密码 <input id="loginPassword" type="password" autocomplete="current-password"></p>
+        <p>用户名 <input id="loginUsername" placeholder="注册时的用户名" autocomplete="username"></p>
+        <p>密码 <input id="loginPassword" type="password" placeholder="登录密码" autocomplete="current-password"></p>
         <p><button type="button" onclick="login()">登录</button></p>
       </div>
       <div id="registerForm" class="hidden">
-        <p>用户名 <input id="regUsername" autocomplete="username"></p>
-        <p>昵称 <input id="regNickname"></p>
-        <p>密码 <input id="regPassword" type="password" autocomplete="new-password"></p>
+        <p>用户名 <input id="regUsername" placeholder="用于登录，唯一标识" autocomplete="username"></p>
+        <p>昵称 <input id="regNickname" placeholder="显示名称，可重复"></p>
+        <p>密码 <input id="regPassword" type="password" placeholder="登录密码" autocomplete="new-password"></p>
         <p><button type="button" onclick="register()">注册</button></p>
       </div>
       <p id="authMsg" style="color:red;"></p>
