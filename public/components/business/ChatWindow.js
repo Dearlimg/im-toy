@@ -9,6 +9,7 @@ import { conversationsStore } from '../../store/conversations.js';
 import { groupsStore } from '../../store/groups.js';
 import { esc } from '../../utils/format.js';
 import { groupMembers } from '../../services/api.js';
+import { fingerprint } from '../../services/e2ee.js';
 
 const titleEl = document.getElementById('chatTitle');
 const messagesEl = document.getElementById('chatMessages');
@@ -32,7 +33,15 @@ export function updateHeader(chatType, obj) {
     return;
   }
   if (chatType === 'friend') {
-    titleEl.innerHTML = '<small>' + esc(obj.nickname || obj.username) + '</small>';
+    const name = esc(obj.nickname || obj.username);
+    if (obj.pubkey) {
+      // 端到端加密安全码：双方线下/语音比对，防止中间人攻击
+      fingerprint(obj.pubkey).then(fp => {
+        titleEl.innerHTML = '<small>' + name + ' · ' + fp + '</small>';
+      });
+    } else {
+      titleEl.innerHTML = '<small>' + name + ' · 未启用加密</small>';
+    }
   } else {
     titleEl.innerHTML = '<small>' + esc(obj.name) + ' · 群聊</small>';
     ensureGroupAction();

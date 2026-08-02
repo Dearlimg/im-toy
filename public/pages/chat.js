@@ -2,9 +2,10 @@
 // 职责：初始化组件、串联 store/services、注册 WS 事件、处理会话切换与发送
 
 import { authStore, loadSession, clearSession } from '../store/auth.js';
-import { setCurrentFriend } from '../store/friends.js';
+import { setCurrentFriend, updateFriendOnline, findFriend } from '../store/friends.js';
 import { setCurrentGroup } from '../store/groups.js';
-import { conversationsStore, openConversation, pushMessage, updateMessageRead } from '../store/conversations.js';
+import { conversationsStore, openConversation, pushMessage, updateMessageRead, updateMessageContent } from '../store/conversations.js';
+import { ensureE2EE, encryptContent, decryptContent, isEncrypted } from '../services/e2ee.js';
 import { unreadStore, setPrivateUnread, increment, clear, totalCount } from '../store/unread.js';
 
 import { initAuthForm } from '../components/business/AuthForm.js';
@@ -56,6 +57,7 @@ async function enterApp() {
   meAvatar.textContent = (u.nickname || u.username || '我').charAt(0).toUpperCase();
 
   connect();
+  await ensureE2EE();
   await loadAll();
   loadUnread();
   render();
@@ -110,7 +112,21 @@ async function loadHistory(chatType, id) {
     const msgs = chatType === 'friend'
       ? await privateConversation(id)
       : await groupMessages(id, 50);
-    conversationsStore.set({ messages: msgs || [] });
+    let list = msgs || [];
+    // 好友会话历史消息解密（E2EE 密文 → 明文）
+    if (chatType === 'friend') {
+      const peer = findFriend(id);
+      if (peer && peer.pubkey) {
+        list = await Promise.all(list.map(async m => {
+          if (isEncrypted(m.content)) {
+            const plain = await decryptContent(peer.pubkey, m.content);
+            if (plain != null) return Object.assign({}, m, { content: plain });
+          }
+          return m;
+        }));
+      }
+    }
+    conversationsStore.set({ messages: list });
     renderAll();
   } catch (e) {
     Toast('加载历史消息失败: ' + e.message);
@@ -207,6 +223,16 @@ function handleWsEvent(type, msg) {
         updateMessageRead(msg.msg_id, true, msg.read_count, msg.total_count);
         renderAll();
       }
+      break;
+    }
+    case 'presence': {
+      // 好友上下线实时更新：侧栏绿/灰点 + 当前会话对方头像
+      updateFriendOnline(msg.uid, msg.online);
+      if (st.chatType === 'friend' && String(st.chatId) === String(msg.uid)) {
+        peerOnline = !!msg.online;
+      }
+      render();
+      renderAll();
       break;
     }
     default:

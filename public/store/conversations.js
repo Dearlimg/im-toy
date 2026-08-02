@@ -48,6 +48,22 @@ export function pushMessage(msg) {
   return next;
 }
 
+// 更新消息内容（E2EE 解密后替换密文）
+// msg：原始消息（含密文 content）；plain：解密后的明文
+export function updateMessageContent(msg, plain) {
+  const cur = conversationsStore.get();
+  const messages = cur.messages.map(m => {
+    const sameId = msg.msg_id != null && String(m.msg_id) === String(msg.msg_id);
+    const sameLocal = msg.msg_id == null && !m.msg_id &&
+      String(m.from_uid) === String(msg.from_uid) && m.content === msg.content;
+    if (sameId || sameLocal) {
+      return Object.assign({}, m, { content: plain });
+    }
+    return m;
+  });
+  conversationsStore.set({ messages });
+}
+
 // 更新消息已读状态
 export function updateMessageRead(msgId, isRead, readCount, totalCount) {
   const cur = conversationsStore.get();

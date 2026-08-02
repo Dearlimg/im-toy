@@ -44,6 +44,8 @@ func RegisterRoutes(r *gin.Engine) {
 		auth.GET("/private/unread-counts", container.PrivateMsgHandler.GetUnreadCounts)
 		auth.POST("/private/mark-read", container.PrivateMsgHandler.MarkAsRead)
 
+		auth.POST("/e2ee/pubkey", container.E2EEHandler.RegisterPubKey)
+
 		auth.POST("/group/create", container.GroupHandler.CreateGroup)
 		auth.GET("/group/list", container.GroupHandler.GetGroupList)
 		auth.GET("/group/members", container.GroupHandler.GetGroupMembers)

@@ -114,6 +114,7 @@ func (s *FriendServiceImpl) GetFriendList(currentUID string) ([]*dto.FriendResp,
 			Remark:    getString(f, "remark"),
 			Status:    getInt(f, "status"),
 			IsOnline:  online,
+			PubKey:    getString(f, "pubkey"),
 		})
 	}
 

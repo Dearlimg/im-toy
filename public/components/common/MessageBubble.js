@@ -3,6 +3,7 @@
 
 import { Avatar } from './Avatar.js';
 import { esc, isImageUrl, fullTime } from '../../utils/format.js';
+import { isEncrypted } from '../../services/e2ee.js';
 
 export function renderMessageBubble(msg, isSelf, peerOnline) {
   const row = document.createElement('div');
@@ -26,7 +27,13 @@ export function renderMessageBubble(msg, isSelf, peerOnline) {
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
 
-  if (isImageUrl(msg.content)) {
+  if (isEncrypted(msg.content)) {
+    // E2EE 密文：解密完成后会被替换为明文并重渲染，此处占位
+    const span = document.createElement('span');
+    span.className = 'enc-msg';
+    span.textContent = '\u{1F512} 加密消息';
+    bubble.appendChild(span);
+  } else if (isImageUrl(msg.content)) {
     const img = document.createElement('img');
     img.src = msg.content;
     img.alt = '图片';

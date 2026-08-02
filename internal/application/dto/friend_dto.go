@@ -26,4 +26,5 @@ type FriendResp struct {
 	Remark    string `json:"remark"`
 	Status    int    `json:"status"`
 	IsOnline  bool   `json:"is_online"`
+	PubKey    string `json:"pubkey"`
 }

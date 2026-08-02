@@ -10,6 +10,9 @@ export const register = (username, nickname, password) =>
 export const login = (username, password) =>
   http.post('/api/user/login', { username, password });
 
+// ---- E2EE ----
+export const registerPubKey = (pubkey) => http.post('/api/e2ee/pubkey', { pubkey });
+
 // ---- 好友 ----
 export const friendList = () => http.get('/api/friend/list');
 export const friendDelete = (friendUid) => http.post('/api/friend/delete', { friend_uid: friendUid });

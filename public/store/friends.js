@@ -24,3 +24,13 @@ export function setCurrentFriend(friend) {
 export function findFriend(uid) {
   return friendsStore.get().friends.find(f => String(f.uid) === String(uid)) || null;
 }
+
+// 更新好友在线状态（presence 推送实时更新）
+export function updateFriendOnline(uid, online) {
+  const friends = friendsStore.get().friends.map(f =>
+    String(f.friend_uid) === String(uid)
+      ? Object.assign({}, f, { is_online: !!online })
+      : f
+  );
+  friendsStore.set({ friends });
+}

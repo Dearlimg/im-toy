@@ -25,6 +25,7 @@ type Container struct {
 	GroupHandler      *handler.GroupHandler
 	PrivateMsgHandler *handler.PrivateMessageHandler
 	MessageHandler    *handler.MessageHandler
+	E2EEHandler       *handler.E2EEHandler
 }
 
 func NewContainer() *Container {
@@ -46,6 +47,7 @@ func NewContainer() *Container {
 	c.GroupHandler = handler.NewGroupHandler(c.GroupService)
 	c.PrivateMsgHandler = handler.NewPrivateMessageHandler(c.MsgRepo, c.ReadRepo)
 	c.MessageHandler = handler.NewMessageHandler(c.ReadRepo)
+	c.E2EEHandler = handler.NewE2EEHandler(c.UserRepo)
 
 	return c
 }

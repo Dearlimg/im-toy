@@ -57,6 +57,7 @@ func cleanupExpiredConn() {
 
 	for range ticker.C {
 		now := time.Now().Unix()
+		var expired []string
 		mu.Lock()
 		for uid, conn := range userConns {
 			if now-atomic.LoadInt64(&conn.LastBeatTime) > ConnExpireSeconds {
@@ -71,9 +72,31 @@ func cleanupExpiredConn() {
 					redis.Cache.RemoveConn(uid)
 				}
 				log.Printf("Cleaned up expired connection: %s", uid)
+				expired = append(expired, uid)
 			}
 		}
 		mu.Unlock()
+		// 锁外推送，避免 SendToUser 加读锁时死锁
+		for _, uid := range expired {
+			notifyFriendsPresence(uid, false)
+		}
+	}
+}
+
+// notifyFriendsPresence 向该用户的所有好友推送在线状态变更事件
+func notifyFriendsPresence(uid string, online bool) {
+	friendRepo := infra_repo.NewFriendRepository()
+	friends, err := friendRepo.FindByUID(uid)
+	if err != nil {
+		return
+	}
+	presence := map[string]interface{}{
+		"type":   "presence",
+		"uid":    uid,
+		"online": online,
+	}
+	for _, f := range friends {
+		SendToUser(f.FriendUID, presence)
 	}
 }
 
@@ -192,6 +215,8 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("User %s joined room: %s", user.Username, room)
+
+	notifyFriendsPresence(user.UID, true)
 
 	go conn.writePump()
 	go conn.heartbeat()
@@ -569,22 +594,24 @@ func (c *Conn) writePump() {
 
 func (c *Conn) cleanup() {
 	mu.Lock()
-	defer mu.Unlock()
-
-	if !c.Closed {
-		c.Closed = true
-		close(c.SendChan)
-		delete(rooms[c.RoomID], c)
-		delete(userConns, c.UserID)
-
-		if redis.Cache != nil {
-			cache := redis.Cache
-			cache.SetUserOffline(c.UserID)
-			cache.RemoveConn(c.UserID)
-		}
-
-		log.Printf("User %s left room: %s", c.Username, c.RoomID)
+	if c.Closed {
+		mu.Unlock()
+		return
 	}
+	c.Closed = true
+	close(c.SendChan)
+	delete(rooms[c.RoomID], c)
+	delete(userConns, c.UserID)
+	mu.Unlock()
+
+	if redis.Cache != nil {
+		cache := redis.Cache
+		cache.SetUserOffline(c.UserID)
+		cache.RemoveConn(c.UserID)
+	}
+
+	notifyFriendsPresence(c.UserID, false)
+	log.Printf("User %s left room: %s", c.Username, c.RoomID)
 }
 
 type WSPusher struct{}
