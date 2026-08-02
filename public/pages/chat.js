@@ -115,10 +115,12 @@ function handleSend(content) {
     Toast('请先选择一个会话');
     return;
   }
-  if (st.chatType === 'friend') {
-    send({ type: 'private_message', to_uid: st.chatId, content });
-  } else {
-    send({ type: 'group_message', group_id: st.chatId, content });
+  const ok = st.chatType === 'friend'
+    ? send({ type: 'private_message', to_uid: st.chatId, content })
+    : send({ type: 'group_message', group_id: st.chatId, content });
+  if (!ok) {
+    Toast('发送失败：未连接到服务器');
+    return;
   }
   const u = authStore.get().user || {};
   pushMessage({
@@ -126,7 +128,8 @@ function handleSend(content) {
     from_nickname: u.nickname || u.username,
     content,
     send_time: Date.now(),
-    is_read: true
+    acked: false,
+    is_read: false
   });
   renderAll();
   scrollToBottom();
@@ -137,24 +140,33 @@ function handleWsEvent(type, msg) {
   const st = conversationsStore.get();
   switch (type) {
     case 'private': {
-      const toMe = String(msg.to_uid) === String(myUid) ||
-        String(msg.from_uid) === String(myUid);
-      if (!toMe) return;
-      const isCurrent = st.chatType === 'friend' && String(st.chatId) === String(msg.from_uid);
+      const fromMe = String(msg.from_uid) === String(myUid);
+      const toMe = String(msg.to_uid) === String(myUid);
+      if (!fromMe && !toMe) return;
+      // 服务端回显给发送方时标记 acked
+      if (fromMe) msg.acked = true;
+      // 当前会话的 chatId 是对方 uid，回显时 from_uid=自己 to_uid=对方
+      const peerUid = fromMe ? msg.to_uid : msg.from_uid;
+      const isCurrent = st.chatType === 'friend' && String(st.chatId) === String(peerUid);
       if (isCurrent) {
         pushMessage(msg);
-        // 收到对方消息后发送已读回执
-        send({ type: 'read_receipt', msg_id: msg.msg_id, from_uid: msg.from_uid });
+        if (!fromMe) {
+          send({ type: 'read_receipt', msg_id: msg.msg_id, from_uid: msg.from_uid });
+        }
         renderAll();
         scrollToBottom();
       } else {
-        increment('friend', msg.from_uid);
+        increment('friend', peerUid);
       }
       break;
     }
     case 'group': {
       const gid = msg.group_id;
       if (gid == null) return;
+      // 服务端回显给发送方时标记 acked
+      if (String(msg.from_uid) === String(myUid)) {
+        msg.acked = true;
+      }
       const isCurrent = st.chatType === 'group' && String(st.chatId) === String(gid);
       if (isCurrent) {
         pushMessage(msg);
@@ -166,10 +178,8 @@ function handleWsEvent(type, msg) {
       break;
     }
     case 'readReceipt': {
-      if (st.chatType === 'friend' && String(msg.from_uid) === String(st.chatId)) {
-        updateMessageRead(msg.msg_id, true, msg.read_count, msg.total_count);
-        renderAll();
-      }
+      updateMessageRead(msg.msg_id, true);
+      renderAll();
       break;
     }
     case 'groupReadReceipt': {

@@ -131,11 +131,19 @@ func (h *PrivateMessageHandler) GetConversation(c *gin.Context) {
 
 	result := make([]map[string]interface{}, 0, len(messages))
 	for _, msg := range messages {
-		isRead := true
-		if lastReadMsgID != "" {
-			isRead = msg.MsgID <= lastReadMsgID
-		} else {
+		var isRead, isAcked bool
+		if msg.FromUID == currentUID {
+			// 自己发的消息：ack=已存储, is_read=对方已读
+			isAcked = msg.MsgID != ""
 			isRead = msg.Read == 1
+		} else {
+			// 对方发的消息：是否已被当前用户读过
+			if lastReadMsgID != "" {
+				isRead = msg.MsgID <= lastReadMsgID
+			} else {
+				isRead = msg.Read == 1
+			}
+			isAcked = true
 		}
 		result = append(result, map[string]interface{}{
 			"msg_id":    msg.MsgID,
@@ -144,8 +152,8 @@ func (h *PrivateMessageHandler) GetConversation(c *gin.Context) {
 			"content":   msg.Content,
 			"type":      msg.Type,
 			"send_time": msg.SendTime,
-			"read":      isRead,
 			"is_read":   isRead,
+			"acked":     isAcked,
 		})
 	}
 

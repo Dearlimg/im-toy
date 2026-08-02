@@ -1,7 +1,7 @@
 // 业务组件：聊天窗口（标题 / 消息列表 / 时间分隔 / 已读状态）
 // 依赖：store、MessageBubble、Avatar、api
 
-import { renderMessageBubble, setReadStatus } from '../common/MessageBubble.js';
+import { renderMessageBubble } from '../common/MessageBubble.js';
 import { Avatar } from '../common/Avatar.js';
 import { openModal } from '../common/Modal.js';
 import { Toast } from '../common/Toast.js';
@@ -106,17 +106,7 @@ function renderMessages() {
       messagesEl.appendChild(div);
     }
     const isSelf = String(msg.from_uid) === String(getUid());
-    const { row, status } = renderMessageBubble(msg, isSelf);
-    if (isSelf) {
-      if (msg.read_count && msg.total_count && msg.read_count > 0) {
-        setReadStatus(status, msg.read_count, msg.total_count);
-      } else if (msg.is_read) {
-        status.textContent = '已读';
-        status.classList.add('read');
-      } else {
-        status.textContent = '已发送';
-      }
-    }
+    const { row } = renderMessageBubble(msg, isSelf);
     messagesEl.appendChild(row);
   });
   scrollToBottom();

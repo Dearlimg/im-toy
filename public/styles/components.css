@@ -117,8 +117,9 @@
 .msg-row.self .bubble { background: var(--bubble-self); border-radius: 12px 4px 12px 12px; }
 .bubble img { display: block; max-width: 220px; max-height: 260px; border-radius: 6px; cursor: zoom-in; }
 .bubble .emoji-char { font-size: 22px; }
-.msg-status { font-size: 11px; color: #b9b9b9; margin-top: 3px; padding: 0 4px; }
-.msg-status .read { color: var(--wx-green); }
+.msg-status { font-size: 13px; color: #666; margin-top: 4px; padding: 0 4px; min-height: 18px; line-height: 18px; display: block; }
+.msg-check { font-size: 16px; margin-right: -2px; display: inline-block; line-height: 1; }
+.msg-check-read { color: var(--wx-green); margin-left: -6px; }
 .sys-tip { text-align: center; font-size: 12px; color: #999; margin: 12px 0; }
 
 /* ---- 输入区 ---- */

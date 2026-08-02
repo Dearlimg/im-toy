@@ -290,6 +290,20 @@ func handlePrivateMessage(c *Conn, msg *WSMessage) {
 	msg.MsgID = idgen.Gen.NextUID()
 	sendTime := time.Now().UnixMilli()
 
+	// 同步落库（不依赖 Kafka PersistConsumer，确保消息持久化）
+	privMsg := &entity.PrivateMessage{
+		MsgID:    msg.MsgID,
+		FromUID:  c.UserID,
+		ToUID:    msg.ToUID,
+		Content:  msg.Content,
+		Type:     1,
+		SendTime: sendTime,
+		Read:     0,
+	}
+	if err := database.DB.Create(privMsg).Error; err != nil {
+		log.Printf("Failed to persist private message: %v", err)
+	}
+
 	event := kafka.PrivateMessageEvent{
 		MsgID:       msg.MsgID,
 		ClientMsgID: msg.ClientMsgID,
@@ -318,7 +332,8 @@ func handlePrivateMessage(c *Conn, msg *WSMessage) {
 		}
 	}
 
-	SendToUser(c.UserID, wsMsg)
+	SendToUser(c.UserID, wsMsg)  // 回显给发送方
+	SendToUser(msg.ToUID, wsMsg) // 推送给接收方
 }
 
 func handleGroupMessage(c *Conn, msg *WSMessage) {
@@ -344,6 +359,19 @@ func handleGroupMessage(c *Conn, msg *WSMessage) {
 
 	msg.MsgID = idgen.Gen.NextUID()
 	sendTime := time.Now().UnixMilli()
+
+	// 同步落库（不依赖 Kafka PersistConsumer）
+	groupMsg := &entity.GroupMessage{
+		MsgID:    msg.MsgID,
+		GroupID:  msg.GroupID,
+		FromUID:  c.UserID,
+		Content:  msg.Content,
+		Type:     1,
+		SendTime: sendTime,
+	}
+	if err := database.DB.Create(groupMsg).Error; err != nil {
+		log.Printf("Failed to persist group message: %v", err)
+	}
 
 	event := kafka.GroupMessageEvent{
 		MsgID:       msg.MsgID,

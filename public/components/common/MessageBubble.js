@@ -47,7 +47,25 @@ export function renderMessageBubble(msg, isSelf) {
 
   const status = document.createElement('div');
   status.className = 'msg-status';
-  status.textContent = isSelf ? '已发送' : fullTime(msg.send_time);
+  if (isSelf) {
+    // 纸飞机风格：单对号=已发送(acked)，双对号=对方已读(is_read)
+    const check = document.createElement('span');
+    check.className = 'msg-check';
+    check.textContent = '\u2713';
+    if (msg.is_read) {
+      const check2 = document.createElement('span');
+      check2.className = 'msg-check msg-check-read';
+      check2.textContent = '\u2713';
+      status.appendChild(check);
+      status.appendChild(check2);
+    } else if (msg.acked) {
+      status.appendChild(check);
+    } else {
+      status.textContent = '\u53d1\u9001\u4e2d...';
+    }
+  } else {
+    status.textContent = fullTime(msg.send_time);
+  }
   main.appendChild(status);
 
   row.appendChild(main);
