@@ -1,945 +1,110 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IM 简易客户端</title>
-  <style>
-    body { font-family: sans-serif; margin: 0; padding: 8px; background: #f0f0f0; }
-    h1 { font-size: 1.2rem; }
-    input, button, textarea { font-size: 14px; padding: 6px; margin: 2px; }
-    .hidden { display: none !important; }
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .panel { background: #fff; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
-    #chatPage { display: flex; flex-direction: column; height: calc(100vh - 24px); max-width: 1100px; margin: 0 auto; }
-    #mainRow { display: flex; flex: 1; min-height: 0; gap: 8px; }
-    #sidebar { width: 280px; min-width: 200px; border: 1px solid #ccc; background: #fff; display: flex; flex-direction: column; }
-    #sidebar .tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid #ddd; }
-    #sidebar .tabs button { flex: 1; min-width: 60px; padding: 8px; border: none; background: #eee; cursor: pointer; }
-    #sidebar .tabs button.active { background: #ddd; font-weight: bold; }
-    #listArea { flex: 1; overflow: auto; padding: 6px; font-size: 13px; }
-    #chatArea { flex: 1; display: flex; flex-direction: column; min-width: 0; border: 1px solid #ccc; background: #fff; }
-    #chatTitle { padding: 8px; border-bottom: 1px solid #ddd; font-weight: bold; }
-    #chatMessages { flex: 1; overflow: auto; padding: 8px; background: #fafafa; font-size: 14px; }
-    .msg { margin: 6px 0; padding: 6px; border-left: 3px solid #999; background: #fff; }
-    .msg.self { border-left-color: #07c; text-align: right; }
-    .msg .meta { font-size: 12px; color: #666; }
-    #chatInputRow { display: flex; padding: 8px; border-top: 1px solid #ddd; gap: 6px; }
-    #chatInputRow input { flex: 1; }
-    .friend-item, .group-item { padding: 8px; border: 1px solid #eee; margin: 4px 0; cursor: pointer; position: relative; }
-    .friend-item.active, .group-item.active { background: #e3f2fd; }
-    .item-actions { float: right; }
-    .item-actions button { font-size: 12px; padding: 2px 6px; }
-    .unread-badge {
-      position: absolute;
-      right: 8px;
-      top: 50%;
-      transform: translateY(-50%);
-      background: linear-gradient(135deg, #ff6b6b, #ff4d4f);
-      color: white;
-      font-size: 11px;
-      padding: 2px 7px;
-      border-radius: 10px;
-      min-width: 18px;
-      text-align: center;
-      box-shadow: 0 2px 4px rgba(255, 77, 79, 0.3);
-      animation: pulse 1.5s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { transform: translateY(-50%) scale(1); }
-      50% { transform: translateY(-50%) scale(1.1); }
-    }
-    .msg .read-status {
-      font-size: 11px;
-      color: #999;
-      margin-top: 2px;
-      display: flex;
-      align-items: center;
-      gap: 3px;
-    }
-    .msg .read-status.unread {
-      color: #1890ff;
-      font-weight: 500;
-    }
-    .msg .read-status::before {
-      content: '';
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #d9d9d9;
-    }
-    .msg .read-status.unread::before {
-      background: #1890ff;
-      box-shadow: 0 0 6px rgba(24, 144, 255, 0.5);
-    }
-    #authPage { max-width: 400px; margin: 40px auto; }
-    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 100; }
-    .modal.show { display: flex; }
-    .modal-inner { background: #fff; padding: 16px; border: 1px solid #333; max-width: 90vw; max-height: 90vh; overflow: auto; min-width: 280px; }
-    #apiHint { font-size: 12px; color: #666; margin-top: 8px; }
-  </style>
-  <script src="config.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IM</title>
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/layout.css">
+<link rel="stylesheet" href="styles/components.css">
 </head>
 <body>
 
-  <div id="authPage">
-    <div class="panel">
-      <h1>登录 / 注册</h1>
-      <div class="row">
-        <button type="button" id="tabLogin" onclick="showAuth('login')">登录</button>
-        <button type="button" id="tabReg" onclick="showAuth('register')">注册</button>
-      </div>
-      <div id="loginForm">
-        <p>用户名 <input id="loginUsername" autocomplete="username"></p>
-        <p>密码 <input id="loginPassword" type="password" autocomplete="current-password"></p>
-        <p><button type="button" onclick="login()">登录</button></p>
-      </div>
-      <div id="registerForm" class="hidden">
-        <p>用户名 <input id="regUsername" autocomplete="username"></p>
-        <p>昵称 <input id="regNickname"></p>
-        <p>密码 <input id="regPassword" type="password" autocomplete="new-password"></p>
-        <p><button type="button" onclick="register()">注册</button></p>
-      </div>
-      <p id="authMsg" style="color:red;"></p>
-      <p id="apiHint"></p>
+<!-- 登录/注册 -->
+<div id="authPage">
+  <div class="auth-card">
+    <div class="auth-logo">聊</div>
+    <div class="auth-title">IM · 简易聊天</div>
+    <div class="auth-tabs">
+      <button type="button" id="tabLogin" class="active">登录</button>
+      <button type="button" id="tabReg">注册</button>
     </div>
+    <div id="loginForm">
+      <div class="field"><input id="loginUsername" placeholder="用户名" autocomplete="username"></div>
+      <div class="field"><input id="loginPassword" type="password" placeholder="密码" autocomplete="current-password"></div>
+      <button class="btn-primary" type="button" id="loginBtn">登 录</button>
+    </div>
+    <div id="registerForm" class="hidden">
+      <div class="field"><input id="regUsername" placeholder="用户名" autocomplete="username"></div>
+      <div class="field"><input id="regNickname" placeholder="昵称"></div>
+      <div class="field"><input id="regPassword" type="password" placeholder="密码" autocomplete="new-password"></div>
+      <button class="btn-primary" type="button" id="regBtn">注 册</button>
+    </div>
+    <div id="authMsg"></div>
+    <p id="apiHint"></p>
   </div>
+</div>
 
-  <div id="chatPage" class="hidden">
-    <div class="panel row" style="justify-content: space-between;">
-      <span id="meInfo">未登录</span>
-      <button type="button" onclick="logout()">退出</button>
-    </div>
-    <div id="mainRow">
-      <div id="sidebar">
-        <div class="tabs">
-          <button type="button" class="active" data-tab="friends" onclick="switchSide('friends')">好友</button>
-          <button type="button" data-tab="requests" onclick="switchSide('requests')">请求</button>
-          <button type="button" data-tab="groups" onclick="switchSide('groups')">群聊</button>
-        </div>
-        <div class="panel" style="margin:0;border-left:0;border-right:0;">
-          <div class="row">
-            <input id="searchInput" placeholder="搜索用户 keyword" style="flex:1" onkeydown="if(event.key==='Enter')searchUser()">
-            <button type="button" onclick="searchUser()">搜</button>
-          </div>
-          <button type="button" onclick="openAddFriendModal()" style="margin-top:6px;width:100%">添加好友（弹窗搜索）</button>
-        </div>
-        <div id="listArea"></div>
+<!-- 主界面 -->
+<div id="app" class="hidden">
+  <div class="mobile-backdrop" id="mobileBackdrop"></div>
+
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="avatar online" id="meAvatar">我</div>
+      <div class="side-me">
+        <div class="nick" id="meNick">未登录</div>
+        <div class="sub" id="meSub"></div>
       </div>
-      <div id="chatArea">
-        <div id="chatTitle">请选择左侧好友或群聊</div>
-        <div id="chatMessages"></div>
-        <div id="chatInputRow">
-          <input id="messageInput" placeholder="消息..." onkeydown="if(event.key==='Enter')sendMessage()">
-          <button type="button" onclick="sendMessage()">发送</button>
-        </div>
+      <button class="icon-btn" id="searchBtn" title="搜索添加用户">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+      </button>
+      <button class="icon-btn" id="logoutBtn" title="退出登录">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
+    <div class="sidebar-search">
+      <div class="search-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+        <input id="searchInput" placeholder="搜索用户并添加">
       </div>
     </div>
-  </div>
-
-  <div id="addFriendModal" class="modal">
-    <div class="modal-inner">
-      <h3>添加好友</h3>
-      <p><input id="addFriendKeyword" placeholder="用户名/昵称 keyword" style="width:100%"></p>
-      <p><button type="button" onclick="searchUserForAdd()">搜索</button></p>
-      <div id="searchResults"></div>
-      <p><button type="button" onclick="closeAddFriendModal()">关闭</button></p>
+    <div class="side-tabs">
+      <button class="active" data-tab="friends">消息</button>
+      <button data-tab="requests">请求</button>
+      <button data-tab="groups">群聊</button>
     </div>
-  </div>
+    <div id="listArea"></div>
+  </aside>
 
-  <div id="createGroupModal" class="modal">
-    <div class="modal-inner">
-      <h3>创建群聊</h3>
-      <p>群名称 <input id="createGroupName" maxlength="50" style="width:100%"></p>
-      <p>勾选好友为成员：</p>
-      <div id="createGroupMemberList"></div>
-      <p class="row">
-        <button type="button" onclick="closeCreateGroupModal()">取消</button>
-        <button type="button" onclick="submitCreateGroup()">创建</button>
-      </p>
+  <main id="chatArea">
+    <header id="chatHeader">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+        <button class="icon-btn" id="backBtn" title="返回">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div id="chatTitle">微聊</div>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="clearBtn" title="清屏">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="chatMessages">
+      <div class="empty-tip" id="chatEmptyTip">选择一个对话开始聊天</div>
     </div>
-  </div>
 
-  <script>
-    (function () {
-      var cfg = window.IM_CONFIG || {};
-      var hint = document.getElementById('apiHint');
-      if (hint) {
-        if (cfg.API_ORIGIN) {
-          hint.textContent = 'API: ' + cfg.API_ORIGIN + '（独立前端模式）';
-        } else {
-          hint.textContent = 'API: 同域 ' + location.origin + '（可在 config.js 设置 API_ORIGIN）';
-        }
-      }
-    })();
+    <div id="chatInput">
+      <div class="input-toolbar">
+        <button class="icon-btn" id="emojiBtn" title="表情">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+        </button>
+        <button class="icon-btn" id="imageBtn" title="图片">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </button>
+        <input type="file" id="fileInput" accept="image/*" style="display:none">
+      </div>
+      <div class="input-row">
+        <textarea id="messageInput" rows="1" placeholder="输入消息…"></textarea>
+        <button class="btn-send" id="sendBtn">发送</button>
+      </div>
+    </div>
+  </main>
+</div>
 
-    var API = (function () {
-      var cfg = window.IM_CONFIG || {};
-      if (cfg.API_ORIGIN) {
-        return String(cfg.API_ORIGIN).replace(/\/$/, '') + '/api';
-      }
-      return location.origin + '/api';
-    })();
-
-    function wsRoomURL(tok) {
-      var cfg = window.IM_CONFIG || {};
-      var origin;
-      if (cfg.API_ORIGIN) {
-        try {
-          var u = new URL(cfg.API_ORIGIN);
-          origin = (u.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + u.host;
-        } catch (e) {
-          origin = '';
-        }
-      }
-      if (!origin) {
-        var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        origin = proto + '//' + location.host;
-      }
-      return origin + '/room?room=default&token=' + encodeURIComponent(tok);
-    }
-
-    let token = null;
-    let currentUser = null;
-    let friendsCache = [];
-    let groupsCache = [];
-    let currentChatFriend = null;
-    let currentChatGroup = null;
-    let ws = null;
-    let roomReadStatus = {}; // 记录每个房间的已读状态
-    let unreadCounts = {}; // 记录每个房间的未读数
-
-    function showAuth(which) {
-      document.getElementById('loginForm').classList.toggle('hidden', which !== 'login');
-      document.getElementById('registerForm').classList.toggle('hidden', which !== 'register');
-      document.getElementById('tabLogin').classList.toggle('active', which === 'login');
-      document.getElementById('tabReg').classList.toggle('active', which === 'register');
-    }
-
-    function setAuthMsg(t) {
-      document.getElementById('authMsg').textContent = t || '';
-    }
-
-    function parseLoginPayload(data) {
-      if (!data || typeof data !== 'object') return null;
-      if (data.token && data.user) return { token: data.token, user: data.user };
-      return null;
-    }
-
-    async function register() {
-      setAuthMsg('');
-      const username = document.getElementById('regUsername').value.trim();
-      const nickname = document.getElementById('regNickname').value.trim();
-      const password = document.getElementById('regPassword').value;
-      try {
-        const res = await fetch(API + '/user/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, nickname, password })
-        });
-        const j = await res.json();
-        if (j.code === 0) {
-          const p = parseLoginPayload(j.data);
-          if (!p) {
-            setAuthMsg('注册成功，请登录');
-            showAuth('login');
-            return;
-          }
-          applySession(p.token, p.user);
-          enterChat();
-          return;
-        }
-        setAuthMsg(j.message || '注册失败');
-      } catch (e) {
-        setAuthMsg('网络错误');
-      }
-    }
-
-    async function login() {
-      setAuthMsg('');
-      const username = document.getElementById('loginUsername').value.trim();
-      const password = document.getElementById('loginPassword').value;
-      try {
-        const res = await fetch(API + '/user/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password })
-        });
-        const j = await res.json();
-        if (j.code === 0) {
-          const p = parseLoginPayload(j.data);
-          if (!p) {
-            setAuthMsg('响应格式错误');
-            return;
-          }
-          applySession(p.token, p.user);
-          enterChat();
-          return;
-        }
-        setAuthMsg(j.message || '登录失败');
-      } catch (e) {
-        setAuthMsg('网络错误');
-      }
-    }
-
-    function applySession(t, user) {
-      token = t;
-      currentUser = user;
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-    }
-
-    function logout() {
-      token = null;
-      currentUser = null;
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      if (ws) { try { ws.close(); } catch (e) {} }
-      ws = null;
-      document.getElementById('chatPage').classList.add('hidden');
-      document.getElementById('authPage').classList.remove('hidden');
-    }
-
-    async function enterChat() {
-      document.getElementById('authPage').classList.add('hidden');
-      document.getElementById('chatPage').classList.remove('hidden');
-      document.getElementById('meInfo').textContent =
-        (currentUser.nickname || currentUser.username) + ' | uid: ' + currentUser.uid;
-      switchSide('friends');
-      await loadFriends();
-      await loadFriendRequests();
-      await loadGroups();
-      await loadUnreadCounts();
-      connectWS();
-    }
-
-    function authHeader() {
-      return { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
-    }
-
-    function switchSide(tab) {
-      document.querySelectorAll('#sidebar .tabs button[data-tab]').forEach(b => {
-        b.classList.toggle('active', b.getAttribute('data-tab') === tab);
-      });
-      window._sideTab = tab;
-      if (tab === 'friends') loadFriends();
-      if (tab === 'requests') loadFriendRequests();
-      if (tab === 'groups') loadGroups();
-    }
-
-    async function loadFriends() {
-      const el = document.getElementById('listArea');
-      if (window._sideTab !== 'friends') return;
-      try {
-        const res = await fetch(API + '/friend/list', { headers: authHeader() });
-        const j = await res.json();
-        if (j.code !== 0) {
-          el.textContent = j.message || '加载失败';
-          return;
-        }
-        friendsCache = j.data || [];
-        el.innerHTML = friendsCache.length ? friendsCache.map(f => {
-          const unread = unreadCounts[f.friend_uid] || 0;
-          const unreadBadge = unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : '';
-          return `
-          <div class="friend-item ${currentChatFriend && currentChatFriend.friend_uid === f.friend_uid ? 'active' : ''}" data-fid="${f.friend_uid}" onclick="selectFriend('${f.friend_uid}')">
-            ${esc(f.nickname || f.username)} (${esc(f.username)})
-            <span class="item-actions">
-              <button type="button" onclick="event.stopPropagation();deleteFriend('${f.friend_uid}')">删</button>
-            </span>
-            ${unreadBadge}
-          </div>
-        `}).join('') : '<div>暂无好友</div>';
-      } catch (e) {
-        el.textContent = '网络错误';
-      }
-    }
-
-    async function deleteFriend(friendUid) {
-      if (!confirm('删除好友 ' + friendUid + ' ?')) return;
-      try {
-        const res = await fetch(API + '/friend/delete', {
-          method: 'POST',
-          headers: authHeader(),
-          body: JSON.stringify({ friend_uid: friendUid })
-        });
-        const j = await res.json();
-        if (j.code === 0) {
-          if (currentChatFriend && currentChatFriend.friend_uid === friendUid) {
-            currentChatFriend = null;
-            document.getElementById('chatTitle').textContent = '请选择左侧好友或群聊';
-            document.getElementById('chatMessages').innerHTML = '';
-          }
-          loadFriends();
-        } else alert(j.message || '删除失败');
-      } catch (e) {
-        alert('网络错误');
-      }
-    }
-
-    async function loadFriendRequests() {
-      const el = document.getElementById('listArea');
-      if (window._sideTab !== 'requests') return;
-      try {
-        const res = await fetch(API + '/friend/requests', { headers: authHeader() });
-        const j = await res.json();
-        if (j.code !== 0) {
-          el.textContent = j.message || '加载失败';
-          return;
-        }
-        const list = j.data || [];
-        el.innerHTML = list.length ? list.map(r => `
-          <div class="friend-item">
-            ${esc(r.nickname || r.username)} — 请求加你为友
-            <button type="button" onclick="acceptFriend('${r.uid}')">接受</button>
-          </div>
-        `).join('') : '<div>暂无请求</div>';
-      } catch (e) {
-        el.textContent = '网络错误';
-      }
-    }
-
-    async function loadUnreadCounts() {
-      try {
-        const res = await fetch(API + '/private/unread-counts', {
-          headers: authHeader()
-        });
-        const j = await res.json();
-        if (j.code === 0 && j.data) {
-          for (const friendUid in j.data) {
-            unreadCounts[friendUid] = j.data[friendUid] || 0;
-          }
-          loadFriends();
-        }
-      } catch (e) {
-        console.error('获取未读数失败', e);
-      }
-    }
-
-    async function acceptFriend(requesterUid) {
-      try {
-        const res = await fetch(API + '/friend/accept', {
-          method: 'POST',
-          headers: authHeader(),
-          body: JSON.stringify({ friend_uid: requesterUid })
-        });
-        const j = await res.json();
-        if (j.code === 0) {
-          loadFriendRequests();
-          loadFriends();
-        } else alert(j.message || '失败');
-      } catch (e) {
-        alert('网络错误');
-      }
-    }
-
-    async function searchUser() {
-      const keyword = document.getElementById('searchInput').value.trim();
-      if (!keyword) return;
-      await searchUserApi(keyword, false);
-    }
-
-    async function searchUserForAdd() {
-      const keyword = document.getElementById('addFriendKeyword').value.trim();
-      if (!keyword) return;
-      await searchUserApi(keyword, true);
-    }
-
-    async function searchUserApi(keyword, inModal) {
-      try {
-        const res = await fetch(API + '/friend/search', {
-          method: 'POST',
-          headers: authHeader(),
-          body: JSON.stringify({ keyword: keyword })
-        });
-        const j = await res.json();
-        if (j.code !== 0) {
-          if (inModal) document.getElementById('searchResults').textContent = j.message || '搜索失败';
-          else document.getElementById('listArea').innerHTML = '<div>' + (j.message || '搜索失败') + '</div>';
-          return;
-        }
-        const users = j.data || [];
-        const rows = users.filter(u => u.uid !== currentUser.uid).map(u => `
-          <div class="row" style="justify-content:space-between;margin:4px 0;">
-            <span>${esc(u.nickname)} @${esc(u.username)}</span>
-            <button type="button" onclick="addFriend('${u.uid}')">添加</button>
-          </div>
-        `).join('');
-        if (inModal) {
-          document.getElementById('searchResults').innerHTML = rows || '<div>无结果</div>';
-        } else {
-          document.getElementById('listArea').innerHTML = '<div><b>搜索结果</b></div>' + (rows || '<div>无结果</div>');
-        }
-      } catch (e) {
-        if (inModal) document.getElementById('searchResults').textContent = '网络错误';
-      }
-    }
-
-    async function addFriend(friendUid) {
-      try {
-        const res = await fetch(API + '/friend/add', {
-          method: 'POST',
-          headers: authHeader(),
-          body: JSON.stringify({ friend_uid: friendUid })
-        });
-        const j = await res.json();
-        alert(j.code === 0 ? '已发送请求' : (j.message || '失败'));
-      } catch (e) {
-        alert('网络错误');
-      }
-    }
-
-    function openAddFriendModal() {
-      document.getElementById('addFriendModal').classList.add('show');
-      document.getElementById('searchResults').innerHTML = '';
-    }
-    function closeAddFriendModal() {
-      document.getElementById('addFriendModal').classList.remove('show');
-    }
-
-    function reportRead(roomId, lastMsgId, fromUid) {
-      if (!ws || ws.readyState !== WebSocket.OPEN || !lastMsgId) return;
-      ws.send(JSON.stringify({
-        type: 'read_receipt',
-        msg_id: lastMsgId,
-        room_id: roomId,
-        from_uid: fromUid
-      }));
-      unreadCounts[roomId] = 0;
-      loadFriends();
-    }
-
-    async function getRoomReadStatus(roomId) {
-      try {
-        const res = await fetch(API + '/message/read-status?room_id=' + encodeURIComponent(roomId), {
-          headers: authHeader()
-        });
-        const j = await res.json();
-        if (j.code === 0 && j.data) {
-          roomReadStatus[roomId] = j.data;
-          return j.data;
-        }
-      } catch (e) {
-        console.error('获取已读状态失败', e);
-      }
-      return null;
-    }
-
-    function selectFriend(friendUid) {
-      currentChatGroup = null;
-      const f = friendsCache.find(x => x.friend_uid === friendUid);
-      const name = f ? (f.nickname || f.username) : friendUid;
-      currentChatFriend = { friend_uid: friendUid, nickname: name };
-      document.getElementById('chatTitle').textContent = '私聊: ' + name;
-      document.querySelectorAll('.friend-item').forEach(el => {
-        el.classList.toggle('active', el.getAttribute('data-fid') === friendUid);
-      });
-      document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
-      loadPrivateHistory(friendUid);
-    }
-
-    async function loadPrivateHistory(friendUid) {
-      const box = document.getElementById('chatMessages');
-      try {
-        const [readStatus, res] = await Promise.all([
-          getRoomReadStatus(friendUid),
-          fetch(API + '/private/conversation?friend_uid=' + encodeURIComponent(friendUid), {
-            headers: { 'Authorization': 'Bearer ' + token }
-          })
-        ]);
-        const j = await res.json();
-        if (j.code !== 0) {
-          box.textContent = j.message || '加载失败';
-          return;
-        }
-        const msgs = j.data || [];
-
-        const unreadMsgs = msgs.filter(m => m.from_uid !== currentUser.uid && !m.is_read && (!readStatus || !readStatus.last_read_msg_id || m.msg_id > readStatus.last_read_msg_id));
-        if (unreadMsgs.length > 0) {
-          reportRead(friendUid, unreadMsgs[unreadMsgs.length - 1].msg_id);
-        }
-
-        box.innerHTML = msgs.map(m => {
-          const isSelf = m.from_uid === currentUser.uid;
-          const who = isSelf ? '我' : (currentChatFriend.nickname || '对方');
-          const isRead = !readStatus || !readStatus.last_read_msg_id || m.msg_id <= readStatus.last_read_msg_id;
-          return renderMsgLine(isSelf, m.content, m.send_time, who, m.is_read || isRead, m.msg_id);
-        }).join('');
-        box.scrollTop = box.scrollHeight;
-        unreadCounts[friendUid] = 0;
-        loadFriends();
-      } catch (e) {
-        box.textContent = '网络错误';
-      }
-    }
-
-    async function loadGroups() {
-      const el = document.getElementById('listArea');
-      if (window._sideTab !== 'groups') return;
-      try {
-        const res = await fetch(API + '/group/list', { headers: { 'Authorization': 'Bearer ' + token } });
-        const j = await res.json();
-        if (j.code !== 0) {
-          el.textContent = j.message || '加载失败';
-          return;
-        }
-        groupsCache = j.data || [];
-        const rows = groupsCache.map(g => {
-          const unread = unreadCounts[g.group_id] || 0;
-          const unreadBadge = unread > 0 ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>` : '';
-          return `
-          <div class="group-item ${currentChatGroup && currentChatGroup.group_id === g.group_id ? 'active' : ''}" data-gid="${g.group_id}" onclick="selectGroup('${g.group_id}')">
-            ${esc(g.name || g.group_id)}
-            <button type="button" onclick="event.stopPropagation();viewGroupMembers('${g.group_id}')">成员</button>
-            ${unreadBadge}
-          </div>
-        `}).join('');
-        el.innerHTML = '<div style="margin-bottom:8px;"><button type="button" onclick="openCreateGroupModal()">+ 创建群</button></div>' +
-          (rows || '<div>暂无群</div>');
-      } catch (e) {
-        el.textContent = '网络错误';
-      }
-    }
-
-    async function viewGroupMembers(groupId) {
-      try {
-        const res = await fetch(API + '/group/members?group_id=' + encodeURIComponent(groupId), {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const j = await res.json();
-        if (j.code !== 0) {
-          alert(j.message || '失败');
-          return;
-        }
-        const list = (j.data || []).map(m => m.nickname + '(' + m.username + ')').join('\n');
-        alert('群成员:\n' + list);
-      } catch (e) {
-        alert('网络错误');
-      }
-    }
-
-    function selectGroup(groupId) {
-      currentChatFriend = null;
-      const g = groupsCache.find(x => x.group_id === groupId);
-      const name = g && g.name ? g.name : groupId;
-      currentChatGroup = { group_id: groupId, name: name };
-      document.getElementById('chatTitle').textContent = '群聊: ' + name + ' | 成员按钮可看列表';
-      document.querySelectorAll('.group-item').forEach(el => {
-        el.classList.toggle('active', el.getAttribute('data-gid') === groupId);
-      });
-      document.querySelectorAll('.friend-item').forEach(el => el.classList.remove('active'));
-      loadGroupHistory(groupId);
-    }
-
-    async function loadGroupHistory(groupId) {
-      const box = document.getElementById('chatMessages');
-      try {
-        const res = await fetch(API + '/group/messages?group_id=' + encodeURIComponent(groupId) + '&limit=50', {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const j = await res.json();
-        if (j.code !== 0) {
-          box.textContent = j.message || '加载失败';
-          return;
-        }
-        const msgs = j.data || [];
-
-        if (msgs.length > 0) {
-          const unreadMsgIds = msgs.filter(m => m.from_uid !== currentUser.uid).map(m => m.msg_id);
-          if (unreadMsgIds.length > 0) {
-            reportGroupRead(groupId, unreadMsgIds);
-          }
-        }
-
-        box.innerHTML = msgs.map(m => {
-          const self = m.from_uid === currentUser.uid;
-          const who = self ? '我' : (m.from_nickname || m.from_username || m.from_uid);
-          return renderMsgLine(self, m.content, m.send_time, who, false, m.msg_id, m.read_count, m.total_count);
-        }).join('');
-        box.scrollTop = box.scrollHeight;
-        unreadCounts[groupId] = 0;
-        loadGroups();
-      } catch (e) {
-        box.textContent = '网络错误';
-      }
-    }
-
-    function reportGroupRead(groupId, msgIds) {
-      if (!ws || ws.readyState !== WebSocket.OPEN || msgIds.length === 0) return;
-      ws.send(JSON.stringify({
-        type: 'group_read_receipt',
-        group_id: groupId,
-        msg_ids: msgIds
-      }));
-      ws.send(JSON.stringify({
-        type: 'read_receipt',
-        msg_id: msgIds[msgIds.length - 1],
-        room_id: groupId
-      }));
-      unreadCounts[groupId] = 0;
-      loadGroups();
-    }
-
-    function openCreateGroupModal() {
-      const box = document.getElementById('createGroupMemberList');
-      document.getElementById('createGroupName').value = '';
-      if (!friendsCache.length) {
-        box.innerHTML = '<div>无好友，无法选人</div>';
-      } else {
-        box.innerHTML = friendsCache.map(f => `
-          <label class="row"><input type="checkbox" class="cg-m" value="${f.friend_uid}"> ${esc(f.nickname || f.username)}</label>
-        `).join('');
-      }
-      document.getElementById('createGroupModal').classList.add('show');
-    }
-    function closeCreateGroupModal() {
-      document.getElementById('createGroupModal').classList.remove('show');
-    }
-
-    async function submitCreateGroup() {
-      const name = document.getElementById('createGroupName').value.trim();
-      if (name.length < 2) {
-        alert('群名至少2字');
-        return;
-      }
-      const member_uids = Array.from(document.querySelectorAll('.cg-m:checked')).map(c => c.value);
-      try {
-        const res = await fetch(API + '/group/create', {
-          method: 'POST',
-          headers: authHeader(),
-          body: JSON.stringify({ name: name, member_uids: member_uids })
-        });
-        const j = await res.json();
-        if (j.code === 0) {
-          closeCreateGroupModal();
-          switchSide('groups');
-          loadGroups();
-        } else alert(j.message || '失败');
-      } catch (e) {
-        alert('网络错误');
-      }
-    }
-
-    function renderMsgLine(self, content, sendTime, whoLabel, isRead, msgId, readCount, totalCount) {
-      const t = typeof sendTime === 'number' ? sendTime : parseInt(sendTime, 10);
-      const d = new Date(t);
-      const timeStr = isNaN(d.getTime()) ? String(sendTime) : d.toLocaleString();
-      let readStatusHtml = '';
-      if (self) {
-        if (readCount !== undefined && totalCount !== undefined) {
-          readStatusHtml = `<div class="read-status">${readCount}人已读 / ${totalCount}人</div>`;
-        } else {
-          readStatusHtml = `<div class="read-status ${isRead ? '' : 'unread'}">${isRead ? '已读' : '未读'}</div>`;
-        }
-      }
-      return `<div class="msg ${self ? 'self' : ''}" data-msg-id="${esc(msgId || '')}"><div class="meta">${esc(whoLabel)} · ${esc(timeStr)}</div><div>${esc(content)}</div>${readStatusHtml}</div>`;
-    }
-
-    function esc(s) {
-      const d = document.createElement('div');
-      d.textContent = s == null ? '' : String(s);
-      return d.innerHTML;
-    }
-
-    let heartbeatTimer = null;
-
-    function startHeartbeat() {
-      stopHeartbeat();
-      heartbeatTimer = setInterval(function() {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({type: 'heartbeat', ts: Date.now()}));
-        }
-      }, 20000);
-    }
-
-    function stopHeartbeat() {
-      if (heartbeatTimer) {
-        clearInterval(heartbeatTimer);
-        heartbeatTimer = null;
-      }
-    }
-
-    let wsReconnectTimer = null;
-    let wsConnecting = false;
-
-    function connectWS() {
-      if (!token) return;
-      if (wsConnecting) return;
-      stopHeartbeat();
-      if (wsReconnectTimer) {
-        clearTimeout(wsReconnectTimer);
-        wsReconnectTimer = null;
-      }
-      if (ws) {
-        ws.onclose = null;
-        ws.close();
-        ws = null;
-      }
-      wsConnecting = true;
-      const url = wsRoomURL(token);
-      ws = new WebSocket(url);
-      ws.onmessage = function(ev) {
-        String(ev.data).split('\n').filter(Boolean).forEach(function(line) {
-          try {
-            onWsMessage(JSON.parse(line));
-          } catch (e) {}
-        });
-      };
-      ws.onopen = function() {
-        wsConnecting = false;
-        startHeartbeat();
-      };
-      ws.onclose = function() {
-        wsConnecting = false;
-        stopHeartbeat();
-        wsReconnectTimer = setTimeout(connectWS, 3000);
-      };
-      ws.onerror = function(err) {
-        wsConnecting = false;
-        console.error('WebSocket error:', err);
-      };
-    }
-
-    function onWsMessage(msg) {
-      if (msg.type === 'read_receipt') {
-        updateMessageReadStatus(msg.msg_id, true);
-        return;
-      }
-      if (msg.type === 'group_read_receipt') {
-        updateGroupMessageReadStatus(msg.msg_id, msg.read_count, msg.total_count);
-        return;
-      }
-      if (msg.type === 'private_message') {
-        const isSelf = msg.from_uid === currentUser.uid;
-        if (isSelf) {
-          if (currentChatFriend && currentChatFriend.friend_uid === msg.to_uid) {
-            appendChatLine(true, msg.content, msg.send_time, '我', false, msg.msg_id);
-          }
-          return;
-        }
-        if (currentChatFriend && currentChatFriend.friend_uid === msg.from_uid) {
-          appendChatLine(false, msg.content, msg.send_time, msg.from_nickname || msg.from_username || msg.from_uid, true, msg.msg_id);
-          reportRead(msg.from_uid, msg.msg_id, msg.from_uid);
-        } else {
-          unreadCounts[msg.from_uid] = (unreadCounts[msg.from_uid] || 0) + 1;
-          loadFriends();
-          alert('新私聊: ' + (msg.from_nickname || msg.from_username));
-        }
-        return;
-      }
-      if (msg.type === 'group_message') {
-        const self = msg.from_uid === currentUser.uid;
-        if (self) {
-          if (currentChatGroup && currentChatGroup.group_id === msg.group_id) {
-            appendChatLine(true, msg.content, msg.send_time, '我', false, msg.msg_id, 1, msg.total_count || 0);
-            reportGroupRead(msg.group_id, [msg.msg_id]);
-          }
-          return;
-        }
-        if (currentChatGroup && currentChatGroup.group_id === msg.group_id) {
-          const who = msg.from_nickname || msg.from_username || msg.from_uid;
-          appendChatLine(false, msg.content, msg.send_time, who, true, msg.msg_id);
-          reportGroupRead(msg.group_id, [msg.msg_id]);
-        } else {
-          unreadCounts[msg.group_id] = (unreadCounts[msg.group_id] || 0) + 1;
-          alert('群消息: ' + (msg.group_id || ''));
-        }
-      }
-    }
-
-    function updateMessageReadStatus(msgId, isRead) {
-      const allMsgs = document.querySelectorAll('.msg[data-msg-id]');
-      Array.from(allMsgs).forEach((msgEl, i) => {
-        const currentMsgId = msgEl.getAttribute('data-msg-id');
-        if (currentMsgId && currentMsgId <= msgId) {
-          const readStatusEl = msgEl.querySelector('.read-status');
-          if (readStatusEl) {
-            msgEl.style.transition = 'all 0.3s ease';
-            msgEl.style.backgroundColor = '#f0f9ff';
-            setTimeout(() => {
-              msgEl.style.backgroundColor = '';
-            }, 500 + i * 50);
-            readStatusEl.textContent = isRead ? '已读' : '未读';
-            readStatusEl.classList.toggle('unread', !isRead);
-          }
-        }
-      });
-    }
-
-    function updateGroupMessageReadStatus(msgId, readCount, totalCount) {
-      const allMsgs = document.querySelectorAll('.msg[data-msg-id]');
-      for (let i = 0; i < allMsgs.length; i++) {
-        const msgEl = allMsgs[i];
-        const currentMsgId = msgEl.getAttribute('data-msg-id');
-        if (currentMsgId === msgId) {
-          const readStatusEl = msgEl.querySelector('.read-status');
-          if (readStatusEl) {
-            msgEl.style.transition = 'all 0.3s ease';
-            msgEl.style.backgroundColor = '#f0f9ff';
-            setTimeout(() => {
-              msgEl.style.backgroundColor = '';
-            }, 500);
-            readStatusEl.textContent = `${readCount}人已读 / ${totalCount}人`;
-            readStatusEl.classList.remove('unread');
-          }
-          break;
-        }
-      }
-    }
-
-    function appendChatLine(self, content, sendTime, whoLabel, isRead, msgId, readCount, totalCount) {
-      const box = document.getElementById('chatMessages');
-      box.insertAdjacentHTML('beforeend', renderMsgLine(self, content, sendTime, whoLabel, isRead, msgId, readCount, totalCount));
-      box.scrollTop = box.scrollHeight;
-    }
-
-    function sendMessage() {
-      if (!currentChatFriend && !currentChatGroup) {
-        alert('先选好友或群');
-        return;
-      }
-      const input = document.getElementById('messageInput');
-      const content = input.value.trim();
-      if (!content) return;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        alert('WebSocket 未连接，请稍后重试');
-        return;
-      }
-      if (currentChatGroup) {
-        ws.send(JSON.stringify({
-          type: 'group_message',
-          client_msg_id: Date.now() + Math.random().toString(36).substr(2, 9),
-          group_id: currentChatGroup.group_id,
-          content: content,
-          timestamp: Date.now()
-        }));
-        input.value = '';
-        return;
-      }
-      ws.send(JSON.stringify({
-        type: 'private_message',
-        client_msg_id: Date.now() + Math.random().toString(36).substr(2, 9),
-        to_uid: currentChatFriend.friend_uid,
-        content: content,
-        timestamp: Date.now()
-      }));
-      input.value = '';
-    }
-
-    window.onload = function() {
-      const t = localStorage.getItem('token');
-      const u = localStorage.getItem('user');
-      if (t && u) {
-        try {
-          token = t;
-          currentUser = JSON.parse(u);
-          enterChat();
-        } catch (e) {
-          logout();
-        }
-      }
-    };
-  </script>
+<script src="config.js"></script>
+<script type="module" src="pages/chat.js"></script>
 </body>
 </html>
