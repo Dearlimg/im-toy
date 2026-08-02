@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# Build artifacts
+im-chat
+*.exe
+
+# Dependencies (will be downloaded by go mod)
+vendor
+
+# Local config (secrets)
+config/config.yaml
+
+# Documentation
+*.md
+docs/
+
+# Frontend (separate deployment)
+cmd/frontend/
+
+# Docker files
+Dockerfile
+.dockerignore
+scripts/docker-compose.yml
+
+# Scripts
+scripts/
+
+# Test files
+**/*_test.go
+**/testdata/
+
+# Misc
+*.log
+.env
+.env.*

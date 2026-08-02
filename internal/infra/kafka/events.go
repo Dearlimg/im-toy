@@ -50,3 +50,16 @@ type ReadEvent struct {
 	GroupID  string `json:"group_id,omitempty"`
 	ReadTime int64  `json:"read_time"`
 }
+
+// BatchReadEvent 批量已读事件
+type BatchReadEvent struct {
+	UID      string                 `json:"uid"`
+	GroupID  string                 `json:"group_id,omitempty"`
+	ReadTime int64                  `json:"read_time"`
+	Msgs     []ReadEventItem        `json:"msgs"`
+}
+
+// ReadEventItem 单条已读记录
+type ReadEventItem struct {
+	MsgID string `json:"msg_id"`
+}

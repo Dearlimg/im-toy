@@ -1,0 +1,19 @@
+FROM nginx:alpine
+
+RUN apk add --no-cache gettext
+
+# 复制静态资源（从根目录复制）
+COPY public/ /usr/share/nginx/html/
+COPY index.html /usr/share/nginx/html/
+
+# 复制 nginx 配置
+COPY cmd/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
+# 复制启动脚本
+COPY cmd/frontend/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+EXPOSE 80
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]

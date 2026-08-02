@@ -1,3 +1,3 @@
 window.IM_CONFIG = {
-  API_ORIGIN: ''
+  API_ORIGIN: 'http://127.0.0.1:8080'
 };

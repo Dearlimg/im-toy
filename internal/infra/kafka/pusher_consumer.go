@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	"im-chat/internal/infra/redis"
 	infra_repo "im-chat/internal/infra/repository"
@@ -67,8 +68,12 @@ func (c *PusherConsumer) Start() {
 		}
 	}()
 
-	<-c.handler.ready
-	log.Println("PusherConsumer started")
+	select {
+	case <-c.handler.ready:
+		log.Println("PusherConsumer started")
+	case <-time.After(8 * time.Second):
+		log.Println("PusherConsumer: kafka not reachable, starting without pusher consumer (degraded mode)")
+	}
 }
 
 func (c *PusherConsumer) Stop() error {

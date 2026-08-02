@@ -76,6 +76,16 @@ func (h *GroupHandler) GetGroupUnreadMessages(c *gin.Context) {
 	response.Success(c, resp)
 }
 
+// GetGroupList 获取当前用户的群组列表
+//
+// 从上下文中获取当前用户ID，调用群组服务获取该用户加入的所有群组信息
+//
+// 参数:
+//   - c: Gin上下文对象，包含请求信息和当前用户UID
+//
+// 返回:
+//   - 成功: 返回群组列表数据
+//   - 失败: 返回应用错误或系统错误信息
 func (h *GroupHandler) GetGroupList(c *gin.Context) {
 	uid, _ := c.Get("uid")
 	currentUID := uid.(string)
@@ -116,6 +126,8 @@ func (h *GroupHandler) GetGroupMembers(c *gin.Context) {
 	response.Success(c, resp)
 }
 
+// GetGroupMessages 获取群组消息记录
+// 根据group_id查询该群组的历史消息，支持自定义返回条数限制（默认50条）
 func (h *GroupHandler) GetGroupMessages(c *gin.Context) {
 	uid, _ := c.Get("uid")
 	currentUID := uid.(string)

@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# Go files
+*.go
+go.mod
+go.sum
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# Build artifacts
+cmd/frontend/main.go
+cmd/frontend/Dockerfile
+
+# Documentation
+*.md
+docs/
+
+# Docker files
+Dockerfile-frontend
+.dockerignore
+docker-compose*.yml
+
+# Scripts
+scripts/
+
+# Config (secrets)
+config/
+
+# Backend
+internal/
+cmd/main.go
+
+# Test files
+**/*_test.go
