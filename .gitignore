@@ -35,3 +35,6 @@ coverage.out
 *.tmp
 *.temp
 /frontend/
+
+# CodeBuddy workspace data (memory, tmp scripts)
+.codebuddy/
