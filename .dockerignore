@@ -7,29 +7,33 @@
 .vscode
 *.swp
 
+# CodeBuddy
+.codebuddy
+
 # Build artifacts
 im-chat
 *.exe
+main.exe
+backend.err
 
 # Dependencies (will be downloaded by go mod)
 vendor
 
-# Local config (secrets)
-config/config.yaml
+# Local config (secrets, mounted at runtime)
+config/
 
 # Documentation
 *.md
 docs/
 
-# Frontend (separate deployment)
+# Frontend nginx config (no longer needed in image)
 cmd/frontend/
+nginx/
 
 # Docker files
 Dockerfile
 .dockerignore
-scripts/docker-compose.yml
-
-# Scripts
+docker-compose.yml
 scripts/
 
 # Test files
@@ -40,3 +44,5 @@ scripts/
 *.log
 .env
 .env.*
+index.html
+*.html

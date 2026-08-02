@@ -1,0 +1,40 @@
+# Server configuration
+server:
+  port: 8080
+  mode: release
+
+# Database configuration (key must be "database", matches Go struct)
+database:
+  host: mysql
+  port: 3306
+  username: root
+  password: sta_go
+  database: im_chat
+  charset: utf8mb4
+  max_idle_conns: 10
+  max_open_conns: 100
+
+# Redis configuration
+redis:
+  host: redis
+  port: 6379
+  password: "sta_go"
+  db: 0
+  pool_size: 10
+
+# Kafka configuration
+kafka:
+  brokers:
+    - "kafka:9092"
+  topic: "im_message"
+  topics:
+    group_msg_raw: "group-msg-raw"
+    group_msg_publish: "group-msg-publish"
+    private_msg: "private-msg"
+    read_events: "read-events"
+
+# JWT configuration (key names match Go struct fields)
+jwt:
+  secret_key: "im_chat_access_secret_prod"
+  expire: 1800
+  refresh: 604800
