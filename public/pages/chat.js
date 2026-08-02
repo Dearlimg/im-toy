@@ -9,7 +9,7 @@ import { unreadStore, setPrivateUnread, increment, clear, totalCount } from '../
 
 import { initAuthForm } from '../components/business/AuthForm.js';
 import { setHandlers as setSidebarHandlers, loadAll, switchSide, render } from '../components/business/Sidebar.js';
-import { updateHeader, renderAll, scrollToBottom, setUidProvider, clearMessages } from '../components/business/ChatWindow.js';
+import { updateHeader, renderAll, scrollToBottom, setUidProvider, setPeerOnlineProvider, clearMessages } from '../components/business/ChatWindow.js';
 import { initInput, setSendHandler } from '../components/business/ChatInput.js';
 import { Toast } from '../components/common/Toast.js';
 
@@ -25,6 +25,10 @@ const searchInput = document.getElementById('searchInput');
 
 let myUid = null;
 setUidProvider(() => myUid);
+
+// 当前会话对方是否在线（由 selectFriend/selectGroup 时设置）
+let peerOnline = false;
+setPeerOnlineProvider(() => peerOnline);
 
 // ============ 启动 ============
 document.addEventListener('DOMContentLoaded', () => {
@@ -82,18 +86,23 @@ async function selectFriend(f) {
   setCurrentFriend(f);
   openConversation('friend', f.friend_uid);
   clear('friend', f.friend_uid);
+  peerOnline = !!f.is_online;
   updateHeader('friend', f);
   await loadHistory('friend', f.friend_uid);
+  sendReadReceipts();
   render();
+  renderAll();
 }
 
 async function selectGroup(g) {
   setCurrentGroup(g);
   openConversation('group', g.group_id);
   clear('group', g.group_id);
+  peerOnline = false;
   updateHeader('group', g);
   await loadHistory('group', g.group_id);
   render();
+  renderAll();
 }
 
 async function loadHistory(chatType, id) {
@@ -106,6 +115,17 @@ async function loadHistory(chatType, id) {
   } catch (e) {
     Toast('加载历史消息失败: ' + e.message);
   }
+}
+
+// 对当前会话中"对方发来且未读"的消息补发已读回执，
+// 让对方实时看到单对号 → 双对号（覆盖离线期间收到的消息）
+function sendReadReceipts() {
+  const st = conversationsStore.get();
+  (st.messages || []).forEach(m => {
+    if (String(m.from_uid) !== String(myUid) && !m.is_read) {
+      send({ type: 'read_receipt', msg_id: m.msg_id, from_uid: m.from_uid });
+    }
+  });
 }
 
 // ============ 发送消息 ============

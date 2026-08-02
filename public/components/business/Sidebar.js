@@ -64,7 +64,7 @@ function renderFriends() {
       item.classList.add('active');
     }
 
-    item.appendChild(Avatar(f.nickname || f.username, { online: true, size: 44, fontSize: 17 }));
+    item.appendChild(Avatar(f.nickname || f.username, { online: !!f.is_online, offline: !f.is_online, size: 44, fontSize: 17 }));
 
     const info = document.createElement('div');
     info.className = 'conv-info';

@@ -13,6 +13,11 @@
   width: 12px; height: 12px; border-radius: 50%;
   background: #22d376; border: 2px solid #fff;
 }
+.avatar.offline::after {
+  content: ''; position: absolute; right: -2px; bottom: -2px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #bbb; border: 2px solid #fff;
+}
 
 /* ---- 图标按钮 ---- */
 .icon-btn {

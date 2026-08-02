@@ -6,6 +6,7 @@ import (
 	"im-chat/internal/application/service"
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/domain/repository"
+	"im-chat/internal/infra/redis"
 	"im-chat/internal/interface/http/response"
 )
 
@@ -99,14 +100,20 @@ func (s *FriendServiceImpl) GetFriendList(currentUID string) ([]*dto.FriendResp,
 
 	var resp []*dto.FriendResp
 	for _, f := range friends {
+		friendUID := getString(f, "friend_uid")
+		online := false
+		if redis.Cache != nil {
+			online, _ = redis.Cache.IsUserOnline(friendUID)
+		}
 		resp = append(resp, &dto.FriendResp{
 			UID:       getString(f, "uid"),
-			FriendUID: getString(f, "friend_uid"),
+			FriendUID: friendUID,
 			Username:  getString(f, "username"),
 			Nickname:  getString(f, "nickname"),
 			Avatar:    getString(f, "avatar"),
 			Remark:    getString(f, "remark"),
 			Status:    getInt(f, "status"),
+			IsOnline:  online,
 		})
 	}
 

@@ -157,7 +157,10 @@ func (h *PrivateMessageHandler) GetConversation(c *gin.Context) {
 		})
 	}
 
+	// 把好友发给我的消息标记为已读（影响历史消息中对方消息的 is_read 显示）
 	_ = h.msgRepo.MarkAsRead(friendUID, currentUID)
+	// 把自己发给好友的消息标记为"对方已读"（触发发送方双对号显示）
+	_ = h.msgRepo.MarkAsRead(currentUID, friendUID)
 
 	response.Success(c, result)
 }

@@ -25,4 +25,5 @@ type FriendResp struct {
 	Avatar    string `json:"avatar"`
 	Remark    string `json:"remark"`
 	Status    int    `json:"status"`
+	IsOnline  bool   `json:"is_online"`
 }

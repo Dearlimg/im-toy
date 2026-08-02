@@ -20,6 +20,12 @@ export function setUidProvider(fn) {
   getUid = fn;
 }
 
+// 由页面层注入当前会话对方是否在线
+let getPeerOnline = () => false;
+export function setPeerOnlineProvider(fn) {
+  getPeerOnline = fn;
+}
+
 export function updateHeader(chatType, obj) {
   if (!obj) {
     titleEl.innerHTML = '<small>选择一个对话开始聊天</small>';
@@ -106,7 +112,7 @@ function renderMessages() {
       messagesEl.appendChild(div);
     }
     const isSelf = String(msg.from_uid) === String(getUid());
-    const { row } = renderMessageBubble(msg, isSelf);
+    const { row } = renderMessageBubble(msg, isSelf, getPeerOnline());
     messagesEl.appendChild(row);
   });
   scrollToBottom();

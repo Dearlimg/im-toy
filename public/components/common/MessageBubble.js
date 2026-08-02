@@ -4,12 +4,13 @@
 import { Avatar } from './Avatar.js';
 import { esc, isImageUrl, fullTime } from '../../utils/format.js';
 
-export function renderMessageBubble(msg, isSelf) {
+export function renderMessageBubble(msg, isSelf, peerOnline) {
   const row = document.createElement('div');
   row.className = 'msg-row' + (isSelf ? ' self' : ' other');
 
   row.appendChild(Avatar(isSelf ? '' : (msg.from_nickname || msg.from_username), {
-    online: !isSelf
+    online: !isSelf && !!peerOnline,
+    offline: !isSelf && !peerOnline
   }));
 
   const main = document.createElement('div');
