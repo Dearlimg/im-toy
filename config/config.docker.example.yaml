@@ -1,0 +1,27 @@
+server:
+  port: 8080
+database:
+  host: mysql
+  port: 3306
+  username: imchat
+  password: imchat-dev-only
+  database: im_chat
+  charset: utf8mb4
+  max_idle_conns: 10
+  max_open_conns: 100
+redis:
+  host: redis
+  port: 6379
+  password: ""
+  db: 0
+kafka:
+  brokers: [] # Legacy Kafka consumers are disabled.
+  topics:
+    group_msg_raw: "group-msg-raw"
+    group_msg_publish: "group-msg-publish"
+    private_msg: "private-msg"
+    read_events: "read-events"
+jwt:
+  secret_key: "local-development-change-this-secret"
+  expire: 1800
+  refresh: 604800

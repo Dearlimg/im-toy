@@ -21,8 +21,9 @@ export function setCurrentFriend(friend) {
 }
 
 // 按 uid 查找好友（用于渲染）
+// 注意：好友列表项中 uid 是"自己"，friend_uid 才是好友 uid（后端 friends.* 语义）
 export function findFriend(uid) {
-  return friendsStore.get().friends.find(f => String(f.uid) === String(uid)) || null;
+  return friendsStore.get().friends.find(f => String(f.friend_uid) === String(uid)) || null;
 }
 
 // 更新好友在线状态（presence 推送实时更新）

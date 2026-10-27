@@ -27,24 +27,29 @@ export function setPeerOnlineProvider(fn) {
   getPeerOnline = fn;
 }
 
+let headerVersion = 0;
 export function updateHeader(chatType, obj) {
+  const version = ++headerVersion;
+  const groupAction = document.querySelector('.header-actions .group-action');
+  if (groupAction) groupAction.hidden = chatType !== 'group' || !obj;
   if (!obj) {
-    titleEl.innerHTML = '<small>选择一个对话开始聊天</small>';
+    titleEl.textContent = '微聊';
     return;
   }
   if (chatType === 'friend') {
     const name = esc(obj.nickname || obj.username);
+    titleEl.innerHTML = name + '<small>私聊</small>';
     if (obj.pubkey) {
       // 端到端加密安全码：双方线下/语音比对，防止中间人攻击
       fingerprint(obj.pubkey).then(fp => {
-        titleEl.innerHTML = '<small>' + name + ' · ' + fp + '</small>';
-      });
-    } else {
-      titleEl.innerHTML = '<small>' + name + ' · 未启用加密</small>';
+        if (version === headerVersion) titleEl.innerHTML = name + '<small>公钥指纹 · ' + esc(fp) + '</small>';
+      }).catch(() => {});
     }
   } else {
-    titleEl.innerHTML = '<small>' + esc(obj.name) + ' · 群聊</small>';
+    titleEl.innerHTML = esc(obj.name) + '<small>群聊 · 未端到端加密</small>';
     ensureGroupAction();
+    const action = document.querySelector('.header-actions .group-action');
+    if (action) action.hidden = false;
   }
 }
 
@@ -87,9 +92,35 @@ export function clearMessages() {
   renderAll();
 }
 
+let renderedConversation = '';
+let renderedMessageKeys = new Set();
+let renderedFirstKey = '';
+let loadOlderHandler = null;
+let loadingOlder = false;
+
+export function setLoadOlderHandler(fn) {
+  loadOlderHandler = fn;
+}
+
+function messageKey(msg) {
+  return String(msg.msg_id || msg.client_msg_id || (msg.from_uid + ':' + msg.send_time + ':' + msg.content));
+}
+
 export function renderAll() {
   const st = conversationsStore.get();
+  const key = st.chatType ? st.chatType + ':' + st.chatId : '';
+  const sameConversation = key === renderedConversation;
+  const oldKeys = sameConversation ? renderedMessageKeys : new Set();
+  const previousFirstKey = sameConversation ? renderedFirstKey : '';
+  const previousScrollHeight = messagesEl.scrollHeight;
+  const previousScrollTop = messagesEl.scrollTop;
+  const wasAtBottom = previousScrollHeight - previousScrollTop - messagesEl.clientHeight < 48;
+  const messages = st.messages || [];
+  const prepended = previousFirstKey && messages.findIndex(msg => messageKey(msg) === previousFirstKey) > 0;
   messagesEl.innerHTML = '';
+  renderedConversation = key;
+  renderedMessageKeys = new Set(messages.map(messageKey));
+  renderedFirstKey = messages.length ? messageKey(messages[0]) : '';
   if (!st.chatType) {
     messagesEl.appendChild(emptyTip);
     return;
@@ -101,12 +132,39 @@ export function renderAll() {
     messagesEl.appendChild(tip);
     return;
   }
-  renderMessages();
+  renderMessages(st, sameConversation && oldKeys.size > 0 && !prepended ? oldKeys : null);
+  if (prepended) messagesEl.scrollTop = previousScrollTop + messagesEl.scrollHeight - previousScrollHeight;
+  else if (!sameConversation || wasAtBottom) scrollToBottom();
+  else messagesEl.scrollTop = previousScrollTop;
 }
 
-function renderMessages() {
-  const st = conversationsStore.get();
-  messagesEl.innerHTML = '';
+function renderMessages(st, oldKeys) {
+  const fragment = document.createDocumentFragment();
+  if (st.hasOlder && loadOlderHandler) {
+    const button = document.createElement('button');
+    button.className = 'load-older';
+    button.type = 'button';
+    button.textContent = loadingOlder ? '加载中…' : '加载更早消息';
+    button.disabled = loadingOlder;
+    button.addEventListener('click', async () => {
+      if (loadingOlder) return;
+      loadingOlder = true;
+      button.disabled = true;
+      button.textContent = '加载中…';
+      try {
+        await loadOlderHandler();
+      } catch (err) {
+        Toast('加载更早消息失败：' + (err.message || '请稍后重试'));
+      } finally {
+        loadingOlder = false;
+        if (button.isConnected) {
+          button.disabled = false;
+          button.textContent = '加载更早消息';
+        }
+      }
+    });
+    fragment.appendChild(button);
+  }
   let lastDay = null;
   st.messages.forEach(msg => {
     const d = new Date(msg.send_time);
@@ -118,13 +176,14 @@ function renderMessages() {
       const span = document.createElement('span');
       span.textContent = formatDay(d);
       div.appendChild(span);
-      messagesEl.appendChild(div);
+      fragment.appendChild(div);
     }
     const isSelf = String(msg.from_uid) === String(getUid());
     const { row } = renderMessageBubble(msg, isSelf, getPeerOnline());
-    messagesEl.appendChild(row);
+    if (oldKeys && !oldKeys.has(messageKey(msg))) row.classList.add('message-enter');
+    fragment.appendChild(row);
   });
-  scrollToBottom();
+  messagesEl.appendChild(fragment);
 }
 
 export function scrollToBottom() {

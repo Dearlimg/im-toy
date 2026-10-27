@@ -4,17 +4,17 @@
 import { authStore, loadSession, clearSession } from '../store/auth.js';
 import { setCurrentFriend, updateFriendOnline, findFriend } from '../store/friends.js';
 import { setCurrentGroup } from '../store/groups.js';
-import { conversationsStore, openConversation, pushMessage, updateMessageRead, updateMessageContent } from '../store/conversations.js';
-import { ensureE2EE, encryptContent, decryptContent, isEncrypted } from '../services/e2ee.js';
+import { conversationsStore, openConversation, pushMessage, mergeMessages, updateMessageRead, updateMessageContent, markMessageFailed, markMessagePending } from '../store/conversations.js';
+import { ensureE2EE, encryptContent, decryptContent, isEncrypted, verifyPeerKey } from '../services/e2ee.js';
 import { unreadStore, setPrivateUnread, increment, clear, totalCount } from '../store/unread.js';
 
 import { initAuthForm } from '../components/business/AuthForm.js';
 import { setHandlers as setSidebarHandlers, loadAll, switchSide, render } from '../components/business/Sidebar.js';
-import { updateHeader, renderAll, scrollToBottom, setUidProvider, setPeerOnlineProvider, clearMessages } from '../components/business/ChatWindow.js';
+import { updateHeader, renderAll, scrollToBottom, setUidProvider, setPeerOnlineProvider, clearMessages, setLoadOlderHandler } from '../components/business/ChatWindow.js';
 import { initInput, setSendHandler } from '../components/business/ChatInput.js';
 import { Toast } from '../components/common/Toast.js';
 
-import { privateConversation, groupMessages, privateUnreadCounts, friendSearch, friendAdd } from '../services/api.js';
+import { syncMessages, privateUnreadCounts, friendSearch, friendAdd } from '../services/api.js';
 import { openModal } from '../components/common/Modal.js';
 import { connect, disconnect, onMessage, send } from '../services/ws.js';
 
@@ -25,6 +25,33 @@ const meAvatar = document.getElementById('meAvatar');
 const searchInput = document.getElementById('searchInput');
 
 let myUid = null;
+let e2eeReady = false;
+let pendingMessages = new Map();
+let failedMessages = new Set();
+let syncState = null;
+function savePending() {
+  try { localStorage.setItem('im_pending:' + myUid, JSON.stringify({ pending: [...pendingMessages], failed: [...failedMessages] })); } catch (e) { console.warn('pending messages not saved', e); }
+}
+function loadPending() {
+  try {
+    const data = JSON.parse(localStorage.getItem('im_pending:' + myUid) || '{}');
+    pendingMessages = new Map(Array.isArray(data) ? data : (data.pending || []));
+    failedMessages = new Set(data.failed || []);
+  } catch (e) { pendingMessages = new Map(); failedMessages = new Set(); }
+}
+window.addEventListener('im-retry-message', e => {
+  const id = e.detail?.clientMsgID;
+  const payload = pendingMessages.get(id);
+  if (!payload) return;
+  if (!send(payload)) { Toast('未连接到服务器，无法重试'); return; }
+  failedMessages.delete(id);
+  markMessagePending(id);
+  savePending();
+});
+function clientMessageID() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+}
 setUidProvider(() => myUid);
 
 // 当前会话对方是否在线（由 selectFriend/selectGroup 时设置）
@@ -36,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSession();
   initInput();
   setSendHandler(handleSend);
+  setLoadOlderHandler(loadOlder);
   setSidebarHandlers({ selectFriend, selectGroup });
   onMessage(handleWsEvent);
 
@@ -53,11 +81,12 @@ async function enterApp() {
 
   const u = authStore.get().user || {};
   myUid = u.uid;
+  loadPending();
   meNick.textContent = u.nickname || u.username || '我';
   meAvatar.textContent = (u.nickname || u.username || '我').charAt(0).toUpperCase();
 
   connect();
-  await ensureE2EE();
+  e2eeReady = await ensureE2EE(myUid);
   await loadAll();
   loadUnread();
   render();
@@ -103,33 +132,78 @@ async function selectGroup(g) {
   peerOnline = false;
   updateHeader('group', g);
   await loadHistory('group', g.group_id);
+  sendReadReceipts();
   render();
   renderAll();
 }
 
 async function loadHistory(chatType, id) {
+  const state = { chatType, id: String(id), cursor: '', older: '', loading: false };
+  syncState = state;
   try {
-    const msgs = chatType === 'friend'
-      ? await privateConversation(id)
-      : await groupMessages(id, 50);
-    let list = msgs || [];
-    // 好友会话历史消息解密（E2EE 密文 → 明文）
-    if (chatType === 'friend') {
-      const peer = findFriend(id);
-      if (peer && peer.pubkey) {
-        list = await Promise.all(list.map(async m => {
-          if (isEncrypted(m.content)) {
-            const plain = await decryptContent(peer.pubkey, m.content);
-            if (plain != null) return Object.assign({}, m, { content: plain });
-          }
-          return m;
-        }));
-      }
+    const page = await syncMessages(chatType, id, { tail: true });
+    let list = (page.messages || []).map(m => ({ ...m, acked: true }));
+    if (chatType === 'friend') list = await Promise.all(list.map(m => resolveCipher(m, id)));
+    if (syncState !== state) return;
+    state.cursor = page.next_cursor || '';
+    state.older = page.older_cursor || '';
+    // Preserve real-time arrivals and pending messages while the history request was in flight.
+    const existing = conversationsStore.get().messages;
+    conversationsStore.set({ messages: list, hasOlder: !!page.has_older });
+    mergeMessages(existing);
+    for (const [clientID, payload] of pendingMessages) {
+      const target = chatType === 'friend' ? payload.to_uid : payload.group_id;
+      if (String(target) !== String(id) || payload.type !== (chatType === 'friend' ? 'private_message' : 'group_message')) continue;
+      if (conversationsStore.get().messages.some(m => m.client_msg_id === clientID)) continue;
+      pushMessage({ from_uid: myUid, content: payload.content, client_msg_id: clientID,
+        send_time: payload.client_time || Date.now(), acked: false, failed: failedMessages.has(clientID) });
     }
-    conversationsStore.set({ messages: list });
+    await syncCurrent();
     renderAll();
   } catch (e) {
     Toast('加载历史消息失败: ' + e.message);
+  }
+}
+
+async function syncCurrent() {
+  const state = syncState;
+  if (!state || state.loading) return;
+  state.loading = true;
+  try {
+    let more;
+    do {
+      const page = await syncMessages(state.chatType, state.id, { cursor: state.cursor });
+      if (syncState !== state) return;
+      const rows = (page.messages || []).map(raw => ({ ...raw, acked: true }));
+      const messages = state.chatType === 'friend'
+        ? await Promise.all(rows.map(msg => resolveCipher(msg, state.id))) : rows;
+      if (syncState !== state) return;
+      mergeMessages(messages);
+      state.cursor = page.next_cursor || state.cursor;
+      more = !!page.has_more;
+    } while (more);
+  } catch (e) {
+    Toast('同步消息失败：' + e.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function loadOlder() {
+  const state = syncState;
+  if (!state || !state.older) return;
+  try {
+    const page = await syncMessages(state.chatType, state.id, { before: state.older });
+    const rows = (page.messages || []).map(m => ({ ...m, acked: true }));
+    const list = state.chatType === 'friend'
+      ? await Promise.all(rows.map(m => resolveCipher(m, state.id)))
+      : rows;
+    if (syncState !== state) return;
+    state.older = page.next_cursor || state.older;
+    mergeMessages(list);
+    conversationsStore.set({ hasOlder: !!page.has_more });
+  } catch (e) {
+    Toast('加载更早消息失败：' + e.message);
   }
 }
 
@@ -137,60 +211,132 @@ async function loadHistory(chatType, id) {
 // 让对方实时看到单对号 → 双对号（覆盖离线期间收到的消息）
 function sendReadReceipts() {
   const st = conversationsStore.get();
+  if (st.chatType === 'group') {
+    const ids = (st.messages || []).filter(m => m.msg_id && String(m.from_uid) !== String(myUid)).map(m => m.msg_id);
+    for (let i = 0; i < ids.length; i += 200) {
+      send({ type: 'group_read_receipt', group_id: st.chatId, msg_ids: ids.slice(i, i + 200) });
+    }
+    return;
+  }
   (st.messages || []).forEach(m => {
-    if (String(m.from_uid) !== String(myUid) && !m.is_read) {
+    if (m.msg_id && String(m.from_uid) !== String(myUid) && !m.is_read) {
       send({ type: 'read_receipt', msg_id: m.msg_id, from_uid: m.from_uid });
     }
   });
 }
 
 // ============ 发送消息 ============
-function handleSend(content) {
+async function handleSend(content) {
   const st = conversationsStore.get();
   if (!st.chatType) {
     Toast('请先选择一个会话');
-    return;
+    return false;
   }
-  const ok = st.chatType === 'friend'
-    ? send({ type: 'private_message', to_uid: st.chatId, content })
-    : send({ type: 'group_message', group_id: st.chatId, content });
+  let toSend = content;
+  // 私聊不允许静默降级明文。
+  if (st.chatType === 'friend') {
+    const peer = findFriend(st.chatId);
+    if (!e2eeReady || !peer || !peer.pubkey) {
+      Toast('无法加密：请确认双方均已启用密钥');
+      return false;
+    }
+    if (!await verifyPeerKey(myUid, st.chatId, peer.pubkey)) return false;
+    const cipher = await encryptContent(peer.pubkey, content);
+    if (!cipher) {
+      Toast('加密失败，消息未发送');
+      return false;
+    }
+    toSend = cipher;
+  }
+  const current = conversationsStore.get();
+  if (current.chatType !== st.chatType || String(current.chatId) !== String(st.chatId)) {
+    Toast('会话已切换，消息未发送');
+    return false;
+  }
+  const clientMsgID = clientMessageID();
+  const payload = st.chatType === 'friend'
+    ? { type: 'private_message', to_uid: st.chatId, content: toSend, client_msg_id: clientMsgID, client_time: Date.now() }
+    : { type: 'group_message', group_id: st.chatId, content, client_msg_id: clientMsgID, client_time: Date.now() };
+  const ok = send(payload);
   if (!ok) {
     Toast('发送失败：未连接到服务器');
-    return;
+    return false;
   }
+  pendingMessages.set(clientMsgID, payload);
+  savePending();
   const u = authStore.get().user || {};
+  // 乐观消息用密文入列，服务端回显（同为密文）可匹配替换，回显后解密为明文
   pushMessage({
     from_uid: u.uid,
     from_nickname: u.nickname || u.username,
-    content,
+    content: toSend,
+    client_msg_id: clientMsgID,
     send_time: Date.now(),
     acked: false,
     is_read: false
   });
   renderAll();
   scrollToBottom();
+  return true;
+}
+
+// E2EE：尝试用好友公钥解密 enc. 密文；非密文或解密失败原样返回
+// 说明：ECDH 共享密钥对称，发送方也能用自己的私钥 + 对方公钥解开自己发出的密文
+async function resolveCipher(msg, friendUid) {
+  if (!isEncrypted(msg.content)) return msg;
+  const peer = findFriend(friendUid);
+  if (!peer || !peer.pubkey) return msg;
+  const plain = await decryptContent(peer.pubkey, msg.content);
+  if (plain != null) return Object.assign({}, msg, { content: plain });
+  return msg;
 }
 
 // ============ WS 事件分发 ============
 function handleWsEvent(type, msg) {
   const st = conversationsStore.get();
   switch (type) {
+    case 'connect':
+      for (const [id, payload] of pendingMessages) if (!failedMessages.has(id)) send(payload);
+      syncCurrent().then(sendReadReceipts);
+      break;
+    case 'sendFailed':
+      failedMessages.add(msg.client_msg_id);
+      savePending();
+      markMessageFailed(msg.client_msg_id);
+      Toast('发送失败：' + (msg.error || '请重试'));
+      break;
     case 'private': {
       const fromMe = String(msg.from_uid) === String(myUid);
       const toMe = String(msg.to_uid) === String(myUid);
       if (!fromMe && !toMe) return;
       // 服务端回显给发送方时标记 acked
-      if (fromMe) msg.acked = true;
+      if (fromMe) {
+        msg.acked = true;
+        pendingMessages.delete(msg.client_msg_id);
+        failedMessages.delete(msg.client_msg_id);
+        savePending();
+      }
       // 当前会话的 chatId 是对方 uid，回显时 from_uid=自己 to_uid=对方
       const peerUid = fromMe ? msg.to_uid : msg.from_uid;
       const isCurrent = st.chatType === 'friend' && String(st.chatId) === String(peerUid);
       if (isCurrent) {
-        pushMessage(msg);
-        if (!fromMe) {
-          send({ type: 'read_receipt', msg_id: msg.msg_id, from_uid: msg.from_uid });
+        if (fromMe) {
+          // 自己的消息：密文回显会替换本地乐观密文消息，随后解密为明文展示
+          pushMessage(msg);
+          resolveCipher(msg, peerUid).then(m => {
+            if (m.content !== msg.content) updateMessageContent(msg, m.content);
+            renderAll();
+            scrollToBottom();
+          });
+        } else {
+          // 对方消息：解密后入列（DB 存密文，界面展示明文）
+          resolveCipher(msg, peerUid).then(m => {
+            pushMessage(m);
+            send({ type: 'read_receipt', msg_id: msg.msg_id, from_uid: msg.from_uid });
+            renderAll();
+            scrollToBottom();
+          });
         }
-        renderAll();
-        scrollToBottom();
       } else {
         increment('friend', peerUid);
       }
@@ -202,10 +348,16 @@ function handleWsEvent(type, msg) {
       // 服务端回显给发送方时标记 acked
       if (String(msg.from_uid) === String(myUid)) {
         msg.acked = true;
+        pendingMessages.delete(msg.client_msg_id);
+        failedMessages.delete(msg.client_msg_id);
+        savePending();
       }
       const isCurrent = st.chatType === 'group' && String(st.chatId) === String(gid);
       if (isCurrent) {
         pushMessage(msg);
+        if (String(msg.from_uid) !== String(myUid)) {
+          send({ type: 'group_read_receipt', group_id: gid, msg_ids: [msg.msg_id] });
+        }
         renderAll();
         scrollToBottom();
       } else {

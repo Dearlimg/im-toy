@@ -4,11 +4,11 @@ server:
   mode: debug
 
 # MySQL configuration
-mysql:
-  host: localhost
-  port: 3306
-  username: root
-  password: 123456
+database:
+  host: 127.0.0.1
+  port: 3307
+  username: imchat
+  password: imchat-dev-only
   database: im_chat
   charset: utf8mb4
   max_idle_conns: 10   # 最大空闲连接数
@@ -16,16 +16,15 @@ mysql:
 
 # Redis configuration
 redis:
-  host: localhost
-  port: 6379
+  host: 127.0.0.1
+  port: 6380
   password: ""
   db: 0
   pool_size: 10
 
 # Kafka configuration
 kafka:
-  brokers:
-    - "0.0.0.0:9092"
+  brokers: [] # Legacy Kafka consumers are disabled.
   topic: "im_message"
   topics:
     group_msg_raw: "group-msg-raw"
@@ -35,7 +34,6 @@ kafka:
 
 # JWT configuration
 jwt:
-  access_secret: "im_chat_access_secret"
-  refresh_secret: "im_chat_refresh_secret"
-  access_expire: 1800  # 30 minutes in seconds
-  refresh_expire: 604800  # 7 days in seconds
+  secret_key: "local-development-change-this-secret"
+  expire: 1800  # seconds
+  refresh: 604800  # seconds

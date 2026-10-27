@@ -6,7 +6,6 @@ import (
 	"im-chat/internal/infra/config"
 	"im-chat/internal/infra/database"
 	"im-chat/internal/infra/jwt"
-	"im-chat/internal/infra/kafka"
 	"im-chat/internal/infra/redis"
 	http_interface "im-chat/internal/interface/http"
 	"im-chat/internal/interface/websocket"
@@ -54,8 +53,16 @@ func main() {
 		&entity.GroupMessage{},
 		&entity.UserRoomRead{},
 		&entity.MessageRead{},
+		&entity.MessageRequest{},
+		&entity.MessageConversation{},
 	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
+	}
+	// Old rows must compare as zero rather than SQL NULL in cursor queries.
+	for _, table := range []string{"private_messages", "group_messages"} {
+		if err := database.DB.Exec("UPDATE " + table + " SET seq = 0 WHERE seq IS NULL").Error; err != nil {
+			log.Fatalf("Failed to initialize legacy message sequences: %v", err)
+		}
 	}
 
 	if err := redis.InitRedis(&cfg.Redis); err != nil {
@@ -64,33 +71,7 @@ func main() {
 
 	jwt.InitJWT(&cfg.JWT)
 
-	kafka.InitTopics(&cfg.Kafka)
-
-	if err := kafka.InitProducer(&cfg.Kafka); err != nil {
-		log.Printf("Warning: Failed to init kafka producer: %v", err)
-	}
-
-	persistConsumer, err := kafka.NewPersistConsumer(
-		cfg.Kafka.Brokers,
-		"persist-consumer-group",
-		[]string{kafka.TopicGroupMsgRaw, kafka.TopicPrivateMsg, kafka.TopicReadEvents},
-	)
-	if err != nil {
-		log.Printf("Warning: Failed to create persist consumer: %v", err)
-	} else {
-		persistConsumer.Start()
-	}
-
-	pusherConsumer, err := kafka.NewPusherConsumer(
-		cfg.Kafka.Brokers,
-		"pusher-consumer-group",
-		[]string{kafka.TopicGroupMsgPublish, kafka.TopicPrivateMsg},
-	)
-	if err != nil {
-		log.Printf("Warning: Failed to create pusher consumer: %v", err)
-	} else {
-		pusherConsumer.Start()
-	}
+	log.Println("Messages use MySQL and local push; legacy Kafka consumers are disabled")
 
 	r := gin.Default()
 	http_interface.RegisterRoutes(r)
@@ -112,14 +93,6 @@ func main() {
 
 	<-quit
 	log.Println("Shutting down server...")
-
-	if persistConsumer != nil {
-		persistConsumer.Stop()
-	}
-	if pusherConsumer != nil {
-		pusherConsumer.Stop()
-	}
-	kafka.Close()
 
 	log.Println("Server exited")
 }

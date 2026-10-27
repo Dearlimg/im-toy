@@ -1,15 +1,12 @@
 package handler
 
 import (
-	"im-chat/internal/domain/entity"
+	message_service "im-chat/internal/application/message"
 	domain_repo "im-chat/internal/domain/repository"
 	"im-chat/internal/infra/database"
-	"im-chat/internal/infra/idgen"
 	"im-chat/internal/interface/http/response"
 	ws "im-chat/internal/interface/websocket"
-	"log"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,64 +24,33 @@ func NewPrivateMessageHandler(msgRepo domain_repo.PrivateMessageRepository, read
 }
 
 type SendPrivateMessageReq struct {
-	ToUID   string `json:"to_uid" binding:"required"`
-	Content string `json:"content" binding:"required"`
+	ToUID       string `json:"to_uid" binding:"required"`
+	Content     string `json:"content" binding:"required"`
+	ClientMsgID string `json:"client_msg_id" binding:"required"`
 }
 
 func (h *PrivateMessageHandler) SendMessage(c *gin.Context) {
 	uid, _ := c.Get("uid")
-	fromUID := uid.(string)
-
 	var req SendPrivateMessageReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Failed(c, "参数错误："+err.Error())
+		response.InvalidParams(c, "参数错误："+err.Error())
 		return
 	}
-
-	if fromUID == req.ToUID {
-		response.Failed(c, "不能给自己发消息")
+	in := message_service.Input{
+		Kind: "private", SenderUID: uid.(string), TargetID: req.ToUID,
+		ClientMsgID: req.ClientMsgID, Content: req.Content,
+	}
+	result, err := message_service.Send(c.Request.Context(), database.DB, in)
+	if err != nil {
+		response.Failed(c, "消息未保存，请检查参数后重试")
 		return
 	}
-
-	msgID := idgen.GenerateMsgID()
-	sendTime := time.Now().UnixMilli()
-
-	msg := &entity.PrivateMessage{
-		MsgID:    msgID,
-		FromUID:  fromUID,
-		ToUID:    req.ToUID,
-		Content:  req.Content,
-		Type:     1,
-		SendTime: sendTime,
-		Read:     0,
-	}
-
-	if err := h.msgRepo.Create(msg); err != nil {
-		response.Failed(c, "发送消息失败")
-		return
-	}
-
-	var fromUser entity.User
-	if err := database.DB.Where("uid = ?", fromUID).First(&fromUser).Error; err != nil {
-		fromUser.Username = "未知用户"
-		fromUser.Nickname = "未知用户"
-	}
-
-	wsMsg := map[string]interface{}{
-		"type":          "private_message",
-		"msg_id":        msgID,
-		"from_uid":      fromUID,
-		"from_username": fromUser.Username,
-		"from_nickname": fromUser.Nickname,
-		"to_uid":        req.ToUID,
-		"content":       req.Content,
-		"send_time":     sendTime,
-	}
-
-	log.Printf("About to send WebSocket message to %s: %s", req.ToUID, req.Content)
-	ws.SendToUser(req.ToUID, wsMsg)
-
-	response.Success(c, msg)
+	ws.PushAcceptedMessage(in, result, false)
+	response.Success(c, gin.H{
+		"msg_id": result.MsgID, "seq": result.Seq, "send_time": result.SendTime,
+		"client_msg_id": req.ClientMsgID, "from_uid": in.SenderUID, "to_uid": req.ToUID,
+		"content": req.Content, "acked": true,
+	})
 }
 
 type GetConversationReq struct {
@@ -123,28 +89,10 @@ func (h *PrivateMessageHandler) GetConversation(c *gin.Context) {
 		return
 	}
 
-	readRecord, _ := h.readRepo.FindByUIDAndRoomID(currentUID, friendUID)
-	var lastReadMsgID string
-	if readRecord != nil {
-		lastReadMsgID = readRecord.LastReadMsgID
-	}
-
 	result := make([]map[string]interface{}, 0, len(messages))
 	for _, msg := range messages {
-		var isRead, isAcked bool
-		if msg.FromUID == currentUID {
-			// 自己发的消息：ack=已存储, is_read=对方已读
-			isAcked = msg.MsgID != ""
-			isRead = msg.Read == 1
-		} else {
-			// 对方发的消息：是否已被当前用户读过
-			if lastReadMsgID != "" {
-				isRead = msg.MsgID <= lastReadMsgID
-			} else {
-				isRead = msg.Read == 1
-			}
-			isAcked = true
-		}
+		isRead := msg.Read == 1
+		isAcked := true
 		result = append(result, map[string]interface{}{
 			"msg_id":    msg.MsgID,
 			"from_uid":  msg.FromUID,
@@ -156,11 +104,6 @@ func (h *PrivateMessageHandler) GetConversation(c *gin.Context) {
 			"acked":     isAcked,
 		})
 	}
-
-	// 把好友发给我的消息标记为已读（影响历史消息中对方消息的 is_read 显示）
-	_ = h.msgRepo.MarkAsRead(friendUID, currentUID)
-	// 把自己发给好友的消息标记为"对方已读"（触发发送方双对号显示）
-	_ = h.msgRepo.MarkAsRead(currentUID, friendUID)
 
 	response.Success(c, result)
 }

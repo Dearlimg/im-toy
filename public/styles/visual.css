@@ -1,0 +1,125 @@
+/* 微信风格的浅色界面。动画仅使用 transform / opacity，减少布局抖动。 */
+:root {
+  --wx-green: #07c160;
+  --wx-green-dark: #06ae56;
+  --wx-bg: #f5f5f5;
+  --text-main: #202020;
+  --text-sub: #929292;
+  --border: #e5e5e5;
+  --bubble-self: #95ec69;
+  --motion-ease: cubic-bezier(.22, 1, .36, 1);
+}
+body { background: #dedfdd; }
+button, input, textarea { -webkit-font-smoothing: antialiased; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid #07c160; outline-offset: 2px;
+}
+#authPage {
+  background: radial-gradient(circle at 50% 30%, #f7fbf8, #e5eee8 72%, #e0e9e3);
+}
+.auth-card {
+  max-width: 390px; padding: 42px 36px 30px; border-radius: 14px;
+  box-shadow: 0 16px 50px rgba(30, 57, 39, .10), 0 1px 2px rgba(0, 0, 0, .03);
+  animation: card-enter 320ms var(--motion-ease) both;
+}
+.auth-logo { width: 58px; height: 58px; border-radius: 16px; margin-bottom: 16px; font-size: 26px; box-shadow: 0 6px 18px rgba(7, 193, 96, .22); }
+.auth-title { font-size: 21px; letter-spacing: .04em; margin-bottom: 5px; }
+.auth-subtitle { text-align: center; font-size: 13px; color: #999; margin-bottom: 27px; }
+.auth-tabs { background: #f5f5f5; border-radius: 8px; margin-bottom: 22px; }
+.auth-tabs button { border-radius: 6px; transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease; }
+.field input { background: #f8f8f8; border-color: #ededed; border-radius: 7px; }
+.btn-primary { border-radius: 7px; box-shadow: none; letter-spacing: .08em; }
+.btn-primary:hover { box-shadow: none; }
+
+/* 会话列表与聊天窗采用同一层级的中性灰，绿色留给交互重点。 */
+#app { max-width: 1600px; margin: 0 auto; background: #f5f5f5; box-shadow: 0 0 48px rgba(0, 0, 0, .08); }
+#sidebar { width: 302px; min-width: 302px; background: #f7f7f7; border-right-color: #dedede; }
+.sidebar-header { min-height: 82px; padding: 18px 18px 12px; background: #f7f7f7; gap: 11px; }
+.sidebar-header .avatar { width: 42px; height: 42px; border-radius: 6px; }
+.side-me { color: #242424; cursor: default; }
+.side-me .nick { font-size: 15px; }
+.side-me .sub { color: #929292; opacity: 1; margin-top: 3px; }
+.icon-btn { flex-shrink: 0; color: #666; border-radius: 6px; transition: background-color 160ms ease, color 160ms ease, transform 140ms var(--motion-ease); }
+.icon-btn:hover { background: rgba(0, 0, 0, .055); color: #242424; }
+.icon-btn:active { transform: scale(.93); }
+.sidebar-search { padding: 6px 16px 12px; background: #f7f7f7; }
+.search-box { min-height: 34px; border-radius: 5px; background: #eaeaea; padding: 7px 10px; transition: background-color 160ms ease; }
+.search-box:focus-within { background: #fff; box-shadow: 0 0 0 1px #d8e9df; }
+.search-box input { min-width: 0; }
+.side-tabs { background: #f7f7f7; border-bottom-color: #e7e7e7; padding: 0 12px; }
+.side-tabs button { padding: 11px 0 12px; color: #7d7d7d; font-size: 13px; transition: color 150ms ease; }
+.side-tabs button.active { color: #252525; }
+.side-tabs button.active::after { width: 22px; height: 2px; bottom: 1px; }
+#listArea { background: #f7f7f7; overscroll-behavior: contain; }
+.conv-item { min-height: 68px; padding: 11px 16px; gap: 12px; background: transparent; transition: background-color 150ms ease; }
+.conv-item:hover { background: #ececec; }
+.conv-item.active { background: #dedede; }
+.conv-item .avatar, .avatar { border-radius: 6px; background: linear-gradient(145deg, #7ba793, #4f8f70); }
+.conv-item .avatar.online::after, .conv-item .avatar.offline::after { border-color: #f7f7f7; width: 10px; height: 10px; }
+.conv-item.active .avatar::after { border-color: #dedede; }
+.conv-name { font-size: 14px; color: #282828; }
+.conv-preview { font-size: 12px; color: #a1a1a1; margin-top: 5px; }
+.unread-badge { box-shadow: none; }
+.create-group-btn { border: 0; background: #ebebeb; color: #555; border-radius: 5px; }
+.create-group-btn:hover { background: #e2e2e2; color: #07a851; }
+.empty-tip { color: #aaa; white-space: pre-line; }
+#chatArea, #chatMessages { background: #f5f5f5; }
+#chatHeader { flex: 0 0 68px; height: 68px; background: #f5f5f5; padding: 0 26px; border-bottom-color: #e6e6e6; }
+#menuBtn, .group-action[hidden] { display: none; }
+#chatTitle { font-weight: 500; font-size: 16px; }
+#chatTitle small { font-size: 11px; color: #a0a0a0; margin-top: 4px; }
+#chatMessages { min-height: 0; padding: 22px 30px 12px; overscroll-behavior: contain; }
+.chat-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; gap: 8px; color: #b5b5b5; }
+.chat-empty-icon { width: 62px; height: 62px; color: #d0d0d0; margin-bottom: 5px; }
+.chat-empty-icon svg { width: 100%; height: 100%; }
+.chat-empty strong { font-size: 14px; font-weight: 500; color: #9c9c9c; }
+.chat-empty span:last-child { font-size: 12px; }
+.time-divider { margin: 12px 0 20px; }
+.load-older { display: block; margin: 0 auto 18px; padding: 6px 12px; border: 0; border-radius: 5px; background: transparent; color: #7c9184; font-size: 12px; cursor: pointer; }
+.load-older:hover { background: #e9eeea; }
+.load-older:disabled { cursor: default; opacity: .6; }
+.time-divider span { color: #aaa; background: transparent; padding: 0; font-size: 11px; }
+.msg-row { align-items: flex-start; gap: 10px; margin-bottom: 18px; }
+.msg-row .avatar { width: 38px; height: 38px; }
+.msg-main { max-width: min(66%, 600px); }
+.msg-name { margin-bottom: 5px; }
+.bubble { padding: 10px 13px; font-size: 14px; line-height: 1.55; }
+.msg-row.other .bubble { border-radius: 4px 7px 7px 7px; box-shadow: 0 1px 1px rgba(0, 0, 0, .03); }
+.msg-row.self .bubble { border-radius: 7px 4px 7px 7px; }
+.msg-status { font-size: 10px; color: #aaa; line-height: 14px; min-height: 14px; margin-top: 3px; }
+.msg-check { font-size: 13px; }
+.msg-check-read { color: #53ad6e; }
+.msg-row.message-enter { animation: message-enter 220ms var(--motion-ease) both; }
+#chatInput { background: #f5f5f5; border-top: 1px solid #e2e2e2; padding: 8px 22px 18px; }
+#chatInput .icon-btn, #chatHeader .icon-btn { color: #6f6f6f; }
+#chatInput .icon-btn:hover, #chatHeader .icon-btn:hover { background: #e6e6e6; }
+.input-row { margin-top: 4px; gap: 14px; }
+#messageInput { background: transparent; box-shadow: none; padding: 8px 2px; min-height: 48px; font-size: 14px; }
+#messageInput::placeholder { color: #b5b5b5; }
+.btn-send { height: 34px; padding: 0 24px; border-radius: 5px; box-shadow: none; background: #e7e7e7; color: #07a851; font-weight: 500; transition: background-color 160ms ease, transform 140ms var(--motion-ease); }
+.btn-send:hover { color: #fff; background: #07c160; }
+.btn-send:active { transform: scale(.96); }
+#emojiPanel { max-width: 420px; bottom: 106px; border: 1px solid #eee; box-shadow: 0 8px 28px rgba(0, 0, 0, .12); }
+#emojiPanel.show { animation: panel-enter 180ms var(--motion-ease) both; }
+.modal-mask.show { animation: fade-in 160ms ease both; }
+.modal { border-radius: 10px; animation: card-enter 220ms var(--motion-ease) both; }
+.modal-actions button { border-radius: 6px; }
+#imgModal.show { animation: fade-in 160ms ease both; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes card-enter { from { opacity: 0; transform: translateY(9px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes panel-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes message-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 768px) {
+  #menuBtn { display: flex; }
+  #sidebar { width: min(84vw, 320px); min-width: 0; transition: transform 280ms var(--motion-ease); }
+  .mobile-backdrop { display: block; visibility: hidden; pointer-events: none; opacity: 0; transition: opacity 220ms ease, visibility 220ms; }
+  .mobile-backdrop.show { visibility: visible; pointer-events: auto; opacity: 1; }
+  #chatHeader { height: 60px; flex-basis: 60px; padding: 0 12px; }
+  #chatMessages { padding: 16px 14px 10px; }
+  .msg-main { max-width: 76%; }
+  #chatInput { padding: 6px 12px max(12px, env(safe-area-inset-bottom)); }
+  .auth-card { padding: 36px 28px 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"encoding/json"
+	"im-chat/internal/application/readstate"
 	"im-chat/internal/domain/entity"
 	domain_repo "im-chat/internal/domain/repository"
 	"im-chat/internal/infra/database"
@@ -37,34 +37,17 @@ func (h *MessageHandler) ReportRead(c *gin.Context) {
 		return
 	}
 
-	lastReadTime := time.Now().UnixMilli()
-	if err := h.readRepo.Upsert(currentUID, req.RoomID, req.LastReadMsgID, lastReadTime); err != nil {
+	msg, err := readstate.MarkPrivate(database.DB, currentUID, req.RoomID, req.LastReadMsgID)
+	if err != nil {
 		response.Failed(c, "上报已读失败")
 		return
 	}
-
-	go h.sendReadReceiptToSender(currentUID, req.RoomID, req.LastReadMsgID)
+	ws.SendToUser(msg.FromUID, map[string]interface{}{
+		"type": "read_receipt", "room_id": req.RoomID, "read_uid": currentUID,
+		"msg_id": req.LastReadMsgID, "read_time": time.Now().UnixMilli(),
+	})
 
 	response.Success(c, nil)
-}
-
-func (h *MessageHandler) sendReadReceiptToSender(readerUID, roomID, lastReadMsgID string) {
-	var msg entity.PrivateMessage
-	err := database.DB.Where("msg_id = ?", lastReadMsgID).First(&msg).Error
-	if err != nil || msg.FromUID == readerUID {
-		return
-	}
-
-	receipt := map[string]interface{}{
-		"type":       "read_receipt",
-		"room_id":    roomID,
-		"reader_uid": readerUID,
-		"msg_id":     lastReadMsgID,
-		"read_time":  time.Now().UnixMilli(),
-	}
-
-	receiptBytes, _ := json.Marshal(receipt)
-	ws.SendBytesToUser(msg.FromUID, receiptBytes)
 }
 
 type GetUnreadCountReq struct {
@@ -105,14 +88,16 @@ func (h *MessageHandler) GetRoomReadStatus(c *gin.Context) {
 		return
 	}
 
-	record, err := h.readRepo.FindByUIDAndRoomID(currentUID, roomID)
+	var record entity.PrivateMessage
+	err := database.DB.Where("from_uid = ? AND to_uid = ? AND `read` = ?", roomID, currentUID, 1).
+		Order("seq DESC, id DESC").First(&record).Error
 	if err != nil {
 		response.Success(c, gin.H{"last_read_msg_id": "", "last_read_time": 0})
 		return
 	}
 
 	response.Success(c, gin.H{
-		"last_read_msg_id": record.LastReadMsgID,
-		"last_read_time":   record.LastReadTime,
+		"last_read_msg_id": record.MsgID,
+		"last_read_time":   record.UpdatedAt.UnixMilli(),
 	})
 }

@@ -3,6 +3,7 @@ package http
 import (
 	"im-chat/internal/di"
 	"im-chat/internal/infra/database"
+	"im-chat/internal/interface/http/handler"
 	"im-chat/internal/interface/http/middleware"
 	"net/http"
 
@@ -43,8 +44,11 @@ func RegisterRoutes(r *gin.Engine) {
 		auth.GET("/private/conversation", container.PrivateMsgHandler.GetConversation)
 		auth.GET("/private/unread-counts", container.PrivateMsgHandler.GetUnreadCounts)
 		auth.POST("/private/mark-read", container.PrivateMsgHandler.MarkAsRead)
+		auth.GET("/sync/private", handler.SyncPrivate)
+		auth.GET("/sync/group", handler.SyncGroup)
 
 		auth.POST("/e2ee/pubkey", container.E2EEHandler.RegisterPubKey)
+		auth.GET("/e2ee/pubkey", container.E2EEHandler.GetPubKey)
 
 		auth.POST("/group/create", container.GroupHandler.CreateGroup)
 		auth.GET("/group/list", container.GroupHandler.GetGroupList)

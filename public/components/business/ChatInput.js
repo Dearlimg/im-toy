@@ -41,9 +41,8 @@ export function initInput() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      compressImage(reader.result, (dataUrl) => {
-        if (onSend) onSend(dataUrl);
-        Toast('图片已发送');
+      compressImage(reader.result, async (dataUrl) => {
+        if (onSend && await onSend(dataUrl)) Toast('图片正在发送');
       });
     };
     reader.readAsDataURL(file);
@@ -72,12 +71,14 @@ export function initInput() {
   });
 }
 
-function doSend() {
+async function doSend() {
   const content = inputEl.value.trim();
   if (!validMessage(content)) return;
-  if (onSend) onSend(content);
-  inputEl.value = '';
-  autoResize();
+  if (onSend && await onSend(content)) {
+    // Preserve new typing entered while encryption/verification was pending.
+    if (inputEl.value.trim() === content) inputEl.value = '';
+    autoResize();
+  }
 }
 
 function pickEmoji(e) {

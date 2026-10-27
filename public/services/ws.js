@@ -140,6 +140,9 @@ function handleMessage(msg) {
     case 'group_read_receipt':
       emit('groupReadReceipt', msg);
       break;
+    case 'send_failed':
+      emit('sendFailed', msg);
+      break;
     case 'presence':
       emit('presence', msg);
       break;

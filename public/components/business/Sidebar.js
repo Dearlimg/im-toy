@@ -68,7 +68,8 @@ function renderFriends() {
 
     const info = document.createElement('div');
     info.className = 'conv-info';
-    info.innerHTML = '<div class="conv-name">' + esc(f.nickname || f.username) + '</div>';
+    info.innerHTML = '<div class="conv-name">' + esc(f.nickname || f.username) + '</div>'
+      + '<div class="conv-preview">' + (f.is_online ? '在线' : '离线') + '</div>';
     item.appendChild(info);
 
     const right = document.createElement('div');
@@ -82,7 +83,7 @@ function renderFriends() {
     }
     item.appendChild(right);
 
-    item.addEventListener('click', () => onSelectFriend && onSelectFriend(f));
+    makeSelectable(item, () => onSelectFriend && onSelectFriend(f));
     listArea.appendChild(item);
   });
 }
@@ -154,7 +155,8 @@ function renderGroups() {
 
     const info = document.createElement('div');
     info.className = 'conv-info';
-    info.innerHTML = '<div class="conv-name">' + esc(g.name) + '</div>';
+    info.innerHTML = '<div class="conv-name">' + esc(g.name) + '</div>'
+      + '<div class="conv-preview">群聊</div>';
     item.appendChild(info);
 
     const right = document.createElement('div');
@@ -168,8 +170,28 @@ function renderGroups() {
     }
     item.appendChild(right);
 
-    item.addEventListener('click', () => onSelectGroup && onSelectGroup(g));
+    makeSelectable(item, () => onSelectGroup && onSelectGroup(g));
     listArea.appendChild(item);
+  });
+}
+
+// 列表项支持键盘操作；移动端选中会话后收起抽屉。
+function makeSelectable(item, select) {
+  item.tabIndex = 0;
+  item.setAttribute('role', 'button');
+  const activate = () => {
+    select();
+    document.getElementById('sidebar').classList.remove('open');
+    const backdrop = document.getElementById('mobileBackdrop');
+    backdrop.classList.remove('show');
+    backdrop.style.opacity = '0';
+  };
+  item.addEventListener('click', activate);
+  item.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      activate();
+    }
   });
 }
 

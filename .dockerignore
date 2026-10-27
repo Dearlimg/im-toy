@@ -44,5 +44,4 @@ scripts/
 *.log
 .env
 .env.*
-index.html
-*.html
+/index.html

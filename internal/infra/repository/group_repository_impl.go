@@ -64,7 +64,7 @@ func (r *GroupRepositoryImpl) FindMembersByGroupID(groupID string) ([]*entity.Gr
 
 func (r *GroupRepositoryImpl) FindMember(groupID, uid string) (*entity.GroupMember, error) {
 	var member entity.GroupMember
-	err := database.DB.Where("group_id = ? AND uid = ?", groupID, uid).First(&member).Error
+	err := database.DB.Where("group_id = ? AND uid = ? AND status = ?", groupID, uid, 1).First(&member).Error
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (r *GroupRepositoryImpl) CreateMessage(msg *entity.GroupMessage) error {
 func (r *GroupRepositoryImpl) FindMessagesByGroupID(groupID string, limit int) ([]*entity.GroupMessage, error) {
 	var messages []*entity.GroupMessage
 	err := database.DB.Where("group_id = ?", groupID).
-		Order("send_time DESC").
+		Order("seq DESC, id DESC").
 		Limit(limit).
 		Find(&messages).Error
 	if err != nil {
@@ -92,10 +92,14 @@ func (r *GroupRepositoryImpl) FindUnreadMessages(groupID, lastReadMsgID string, 
 	query := database.DB.Where("group_id = ?", groupID)
 
 	if lastReadMsgID != "" {
-		query = query.Where("msg_id > ?", lastReadMsgID)
+		var last entity.GroupMessage
+		if err := database.DB.Where("group_id = ? AND msg_id = ?", groupID, lastReadMsgID).First(&last).Error; err != nil {
+			return nil, err
+		}
+		query = query.Where("seq > ? OR (seq = ? AND id > ?)", last.Seq, last.Seq, last.ID)
 	}
 
-	err := query.Order("send_time ASC").Limit(limit).Find(&messages).Error
+	err := query.Order("seq ASC, id ASC").Limit(limit).Find(&messages).Error
 	if err != nil {
 		return nil, err
 	}

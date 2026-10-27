@@ -1,17 +1,18 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	message_service "im-chat/internal/application/message"
+	"im-chat/internal/application/readstate"
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/infra/database"
-	"im-chat/internal/infra/idgen"
 	"im-chat/internal/infra/jwt"
 	"im-chat/internal/infra/kafka"
 	"im-chat/internal/infra/redis"
@@ -57,28 +58,16 @@ func cleanupExpiredConn() {
 
 	for range ticker.C {
 		now := time.Now().Unix()
-		var expired []string
+		expired := []*Conn{}
 		mu.Lock()
-		for uid, conn := range userConns {
+		for _, conn := range userConns {
 			if now-atomic.LoadInt64(&conn.LastBeatTime) > ConnExpireSeconds {
-				if !conn.Closed {
-					conn.Closed = true
-					close(conn.SendChan)
-					conn.Conn.Close()
-				}
-				delete(userConns, uid)
-				if redis.Cache != nil {
-					redis.Cache.SetUserOffline(uid)
-					redis.Cache.RemoveConn(uid)
-				}
-				log.Printf("Cleaned up expired connection: %s", uid)
-				expired = append(expired, uid)
+				expired = append(expired, conn)
 			}
 		}
 		mu.Unlock()
-		// 锁外推送，避免 SendToUser 加读锁时死锁
-		for _, uid := range expired {
-			notifyFriendsPresence(uid, false)
+		for _, conn := range expired {
+			conn.cleanup()
 		}
 	}
 }
@@ -190,9 +179,7 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	rooms[room][conn] = true
 	if oldConn, exists := userConns[user.UID]; exists {
-		close(oldConn.SendChan)
-		oldConn.Closed = true
-		oldConn.Conn.Close()
+		closeConnLocked(oldConn)
 	}
 	userConns[user.UID] = conn
 	mu.Unlock()
@@ -219,24 +206,7 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	notifyFriendsPresence(user.UID, true)
 
 	go conn.writePump()
-	go conn.heartbeat()
 	conn.readPump()
-}
-
-func (c *Conn) heartbeat() {
-	ticker := time.NewTicker(HeartbeatInterval)
-	defer ticker.Stop()
-
-	for !c.Closed {
-		<-ticker.C
-		if c.Closed {
-			break
-		}
-		atomic.StoreInt64(&c.LastBeatTime, time.Now().Unix())
-		if redis.Cache != nil {
-			redis.Cache.RefreshUserOnline(c.UserID)
-		}
-	}
 }
 
 func (c *Conn) readPump() {
@@ -269,6 +239,9 @@ func (c *Conn) readPump() {
 			handleGroupReadReceipt(c, &wsMsg)
 		case "heartbeat":
 			atomic.StoreInt64(&c.LastBeatTime, time.Now().Unix())
+			if redis.Cache != nil {
+				redis.Cache.RefreshUserOnline(c.UserID)
+			}
 			sendHeartbeatAck(c)
 		default:
 			handleRoomMessage(c, message)
@@ -282,230 +255,137 @@ func sendHeartbeatAck(c *Conn) {
 		"ts":   time.Now().UnixMilli(),
 	}
 	data, _ := json.Marshal(ack)
-	select {
-	case c.SendChan <- data:
-	default:
-	}
+	sendToConn(c, data)
 }
 
 func handlePrivateMessage(c *Conn, msg *WSMessage) {
-	if msg.ToUID == "" || msg.Content == "" {
-		return
-	}
-
 	if redis.Cache != nil {
-		count, _ := redis.Cache.IncrMsgLimit(c.UserID)
-		if count > MsgRateLimit {
-			log.Printf("Rate limit exceeded for user: %s", c.UserID)
+		count, err := redis.Cache.IncrMsgLimit(c.UserID)
+		if err == nil && count > MsgRateLimit {
+			sendFailure(c, msg.ClientMsgID, "发送过于频繁")
 			return
 		}
 	}
-
-	if msg.ClientMsgID == "" {
-		msg.ClientMsgID = fmt.Sprintf("%d", time.Now().UnixNano())
-	}
-
-	if redis.Cache != nil {
-		added, _ := redis.Cache.CheckAndSetIdempotentKey(c.UserID, msg.ClientMsgID)
-		if !added {
-			return
-		}
-	}
-
-	msg.MsgID = idgen.Gen.NextUID()
-	sendTime := time.Now().UnixMilli()
-
-	// 同步落库（不依赖 Kafka PersistConsumer，确保消息持久化）
-	privMsg := &entity.PrivateMessage{
-		MsgID:    msg.MsgID,
-		FromUID:  c.UserID,
-		ToUID:    msg.ToUID,
-		Content:  msg.Content,
-		Type:     1,
-		SendTime: sendTime,
-		Read:     0,
-	}
-	if err := database.DB.Create(privMsg).Error; err != nil {
-		log.Printf("Failed to persist private message: %v", err)
-	}
-
-	event := kafka.PrivateMessageEvent{
-		MsgID:       msg.MsgID,
-		ClientMsgID: msg.ClientMsgID,
-		FromUID:     c.UserID,
-		ToUID:       msg.ToUID,
-		Content:     msg.Content,
-		SendTime:    sendTime,
-	}
-
-	kafka.Publish(kafka.TopicPrivateMsg, msg.ToUID, &event)
-
-	wsMsg := map[string]interface{}{
-		"type":      "private_message",
-		"msg_id":    msg.MsgID,
-		"from_uid":  c.UserID,
-		"to_uid":    msg.ToUID,
-		"content":   msg.Content,
-		"send_time": sendTime,
-	}
-
-	if redis.Cache != nil {
-		userInfo, _ := redis.Cache.GetUserInfo(c.UserID)
-		if userInfo != nil {
-			wsMsg["from_username"] = userInfo.Username
-			wsMsg["from_nickname"] = userInfo.Nickname
-		}
-	}
-
-	SendToUser(c.UserID, wsMsg)  // 回显给发送方
-	SendToUser(msg.ToUID, wsMsg) // 推送给接收方
+	sendMessage(c, msg, "private", msg.ToUID)
 }
 
 func handleGroupMessage(c *Conn, msg *WSMessage) {
-	if msg.GroupID == "" || msg.Content == "" {
+	sendMessage(c, msg, "group", msg.GroupID)
+}
+
+func sendMessage(c *Conn, msg *WSMessage, kind, target string) {
+	in := message_service.Input{
+		Kind: kind, SenderUID: c.UserID, TargetID: target,
+		ClientMsgID: msg.ClientMsgID, Content: msg.Content,
+	}
+	result, err := message_service.Send(context.Background(), database.DB, in)
+	if err != nil {
+		log.Printf("message acceptance failed for uid=%s: %v", c.UserID, err)
+		sendFailure(c, msg.ClientMsgID, "消息未保存，请重试")
 		return
 	}
+	PushAcceptedMessage(in, result, true)
+}
 
-	groupRepo := infra_repo.NewGroupRepository()
-	if _, err := groupRepo.FindMember(msg.GroupID, c.UserID); err != nil {
+func sendFailure(c *Conn, clientMsgID, reason string) {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"type": "send_failed", "client_msg_id": clientMsgID, "error": reason,
+	})
+	sendToConn(c, payload)
+}
+
+// PushAcceptedMessage delivers a committed message to currently connected users.
+// History remains the source of truth when a user is offline or delivery fails.
+func PushAcceptedMessage(in message_service.Input, result message_service.Result, notifySender bool) {
+	payload := map[string]interface{}{
+		"type": in.Kind + "_message", "client_msg_id": in.ClientMsgID,
+		"msg_id": result.MsgID, "seq": result.Seq, "from_uid": in.SenderUID,
+		"content": in.Content, "send_time": result.SendTime, "acked": true,
+	}
+	if in.Kind == "private" {
+		payload["to_uid"] = in.TargetID
+	} else {
+		payload["group_id"] = in.TargetID
+	}
+	if redis.Cache != nil {
+		if info, _ := redis.Cache.GetUserInfo(in.SenderUID); info != nil {
+			payload["from_username"] = info.Username
+			payload["from_nickname"] = info.Nickname
+		}
+	}
+	if notifySender {
+		SendToUser(in.SenderUID, payload)
+	}
+	if result.Duplicate {
 		return
 	}
-
-	if msg.ClientMsgID == "" {
-		msg.ClientMsgID = fmt.Sprintf("%d", time.Now().UnixNano())
+	if in.Kind == "private" {
+		SendToUser(in.TargetID, payload)
+		return
 	}
-
-	if redis.Cache != nil {
-		added, _ := redis.Cache.CheckAndSetIdempotentKey(c.UserID, msg.ClientMsgID)
-		if !added {
-			return
+	members, err := infra_repo.NewGroupRepository().FindMembersByGroupID(in.TargetID)
+	if err != nil {
+		log.Printf("failed to find group recipients for group=%s: %v", in.TargetID, err)
+		return
+	}
+	for _, member := range members {
+		if member.UID != in.SenderUID {
+			SendToUser(member.UID, payload)
 		}
 	}
-
-	msg.MsgID = idgen.Gen.NextUID()
-	sendTime := time.Now().UnixMilli()
-
-	// 同步落库（不依赖 Kafka PersistConsumer）
-	groupMsg := &entity.GroupMessage{
-		MsgID:    msg.MsgID,
-		GroupID:  msg.GroupID,
-		FromUID:  c.UserID,
-		Content:  msg.Content,
-		Type:     1,
-		SendTime: sendTime,
-	}
-	if err := database.DB.Create(groupMsg).Error; err != nil {
-		log.Printf("Failed to persist group message: %v", err)
-	}
-
-	event := kafka.GroupMessageEvent{
-		MsgID:       msg.MsgID,
-		ClientMsgID: msg.ClientMsgID,
-		GroupID:     msg.GroupID,
-		FromUID:     c.UserID,
-		Content:     msg.Content,
-		SendTime:    sendTime,
-	}
-
-	kafka.Publish(kafka.TopicGroupMsgRaw, msg.GroupID, &event)
-	kafka.Publish(kafka.TopicGroupMsgPublish, msg.GroupID, &event)
-
-	wsPayload := map[string]interface{}{
-		"type":      "group_message",
-		"msg_id":    msg.MsgID,
-		"group_id":  msg.GroupID,
-		"from_uid":  c.UserID,
-		"content":   msg.Content,
-		"send_time": sendTime,
-	}
-
-	if redis.Cache != nil {
-		userInfo, _ := redis.Cache.GetUserInfo(c.UserID)
-		if userInfo != nil {
-			wsPayload["from_username"] = userInfo.Username
-			wsPayload["from_nickname"] = userInfo.Nickname
-		}
-	}
-
-	SendToUser(c.UserID, wsPayload)
 }
 
 func handleReadReceipt(c *Conn, msg *WSMessage) {
-	if msg.MsgID == "" {
-		return
-	}
-
 	roomID := msg.RoomID
-	if roomID == "" && msg.FromUID != "" {
+	if roomID == "" {
 		roomID = msg.FromUID
 	}
-	if roomID == "" {
+	target, err := readstate.MarkPrivate(database.DB, c.UserID, roomID, msg.MsgID)
+	if err != nil {
+		log.Printf("read receipt rejected: %v", err)
 		return
 	}
-
-	lastReadTime := time.Now().UnixMilli()
-
-	readRepo := infra_repo.NewUserRoomReadRepository()
-	readRepo.Upsert(c.UserID, roomID, msg.MsgID, lastReadTime)
-
 	receipt := map[string]interface{}{
 		"type":      "read_receipt",
 		"msg_id":    msg.MsgID,
 		"read_uid":  c.UserID,
 		"room_id":   roomID,
-		"read_time": lastReadTime,
+		"read_time": time.Now().UnixMilli(),
 	}
-
-	var targetMsg entity.PrivateMessage
-	if err := database.DB.Where("msg_id = ?", msg.MsgID).First(&targetMsg).Error; err == nil && targetMsg.FromUID != c.UserID {
-		receiptBytes, _ := json.Marshal(receipt)
-		SendBytesToUser(targetMsg.FromUID, receiptBytes)
-	}
+	SendToUser(target.FromUID, receipt)
 }
 
 func handleGroupReadReceipt(c *Conn, msg *WSMessage) {
-	if msg.GroupID == "" || len(msg.MsgIDs) == 0 {
+	messages, err := readstate.MarkGroup(database.DB, c.UserID, msg.GroupID, msg.MsgIDs)
+	if err != nil {
+		log.Printf("group read receipt rejected: %v", err)
 		return
 	}
-
 	readTime := time.Now().UnixMilli()
-	cache := redis.GetCache()
 	groupRepo := infra_repo.NewGroupRepository()
-
-	for _, msgID := range msg.MsgIDs {
-		cache.AddMsgRead(msgID, c.UserID)
-
-		event := kafka.ReadEvent{
-			MsgID:    msgID,
-			UID:      c.UserID,
-			GroupID:  msg.GroupID,
-			ReadTime: readTime,
-		}
-		kafka.Publish(kafka.TopicReadEvents, msgID, &event)
+	members, err := groupRepo.FindMembersByGroupID(msg.GroupID)
+	if err != nil {
+		return
 	}
-
-	members, _ := groupRepo.FindMembersByGroupID(msg.GroupID)
-	totalCount := len(members)
-
-	readCountMap, _ := redis.BatchGetMsgReadCount(msg.MsgIDs)
-
-	for _, msgID := range msg.MsgIDs {
-		groupMsg, err := groupRepo.FindMessagesByMsgIDs([]string{msgID})
-		if err != nil || len(groupMsg) == 0 || groupMsg[0].FromUID == c.UserID {
+	totalCount := len(members) - 1
+	for _, groupMsg := range messages {
+		if groupMsg.FromUID == c.UserID {
 			continue
 		}
-
+		var readCount int64
+		if err := database.DB.Model(&entity.MessageRead{}).Where("msg_id = ?", groupMsg.MsgID).Count(&readCount).Error; err != nil {
+			continue
+		}
 		receipt := map[string]interface{}{
 			"type":        "group_read_receipt",
 			"group_id":    msg.GroupID,
-			"msg_id":      msgID,
+			"msg_id":      groupMsg.MsgID,
 			"read_uid":    c.UserID,
-			"read_count":  readCountMap[msgID],
+			"read_count":  readCount,
 			"total_count": totalCount,
 			"read_time":   readTime,
 		}
-		receiptBytes, _ := json.Marshal(receipt)
-		SendBytesToUser(groupMsg[0].FromUID, receiptBytes)
+		SendToUser(groupMsg.FromUID, receipt)
 	}
 }
 
@@ -528,16 +408,19 @@ func handleRoomMessage(c *Conn, message []byte) {
 
 	msgBytes, _ := json.Marshal(msg)
 
-	mu.Lock()
+	mu.RLock()
 	for conn := range rooms[c.RoomID] {
 		select {
 		case conn.SendChan <- msgBytes:
 		default:
-			close(conn.SendChan)
-			delete(rooms[c.RoomID], conn)
+			log.Printf("send queue full for uid=%s", conn.UserID)
+			// Force a reconnect so the client can repair the gap through sync.
+			if conn.Conn != nil {
+				conn.Conn.Close()
+			}
 		}
 	}
-	mu.Unlock()
+	mu.RUnlock()
 }
 
 func SendToUser(uid string, msg map[string]interface{}) {
@@ -550,14 +433,17 @@ func SendToUser(uid string, msg map[string]interface{}) {
 
 func SendBytesToUser(uid string, msgBytes []byte) {
 	mu.RLock()
+	defer mu.RUnlock()
 	conn, exists := userConns[uid]
-	mu.RUnlock()
 
 	if exists && !conn.Closed {
 		select {
 		case conn.SendChan <- msgBytes:
 		default:
 			log.Printf("send queue full for uid=%s", uid)
+			if conn.Conn != nil {
+				conn.Conn.Close()
+			}
 		}
 	} else {
 		if !exists {
@@ -565,6 +451,24 @@ func SendBytesToUser(uid string, msgBytes []byte) {
 		} else {
 			log.Printf("user connection closed: uid=%s", uid)
 		}
+	}
+}
+
+// sendToConn holds the same lock used when closing a send channel.
+func sendToConn(conn *Conn, data []byte) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if conn.Closed {
+		return false
+	}
+	select {
+	case conn.SendChan <- data:
+		return true
+	default:
+		if conn.Conn != nil {
+			conn.Conn.Close()
+		}
+		return false
 	}
 }
 
@@ -598,11 +502,12 @@ func (c *Conn) cleanup() {
 		mu.Unlock()
 		return
 	}
-	c.Closed = true
-	close(c.SendChan)
-	delete(rooms[c.RoomID], c)
-	delete(userConns, c.UserID)
+	current := userConns[c.UserID] == c
+	closeConnLocked(c)
 	mu.Unlock()
+	if !current {
+		return
+	}
 
 	if redis.Cache != nil {
 		cache := redis.Cache
@@ -612,6 +517,25 @@ func (c *Conn) cleanup() {
 
 	notifyFriendsPresence(c.UserID, false)
 	log.Printf("User %s left room: %s", c.Username, c.RoomID)
+}
+
+// closeConnLocked detaches and closes a connection while holding mu.
+func closeConnLocked(c *Conn) {
+	if c.Closed {
+		return
+	}
+	c.Closed = true
+	close(c.SendChan)
+	delete(rooms[c.RoomID], c)
+	if len(rooms[c.RoomID]) == 0 {
+		delete(rooms, c.RoomID)
+	}
+	if userConns[c.UserID] == c {
+		delete(userConns, c.UserID)
+	}
+	if c.Conn != nil {
+		c.Conn.Close()
+	}
 }
 
 type WSPusher struct{}

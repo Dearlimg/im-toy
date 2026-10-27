@@ -9,7 +9,28 @@ export const conversationsStore = createStore({
 });
 
 export function openConversation(chatType, chatId) {
-  conversationsStore.set({ chatType, chatId, messages: [] });
+  conversationsStore.set({ chatType, chatId, messages: [], hasOlder: false });
+}
+
+function compareMessages(a, b) {
+  const aSeq = a.msg_id && a.seq != null ? Number(a.seq) : Number.POSITIVE_INFINITY;
+  const bSeq = b.msg_id && b.seq != null ? Number(b.seq) : Number.POSITIVE_INFINITY;
+  if (aSeq !== bSeq) return aSeq - bSeq;
+  if (aSeq === 0 && a.ID != null && b.ID != null) return Number(a.ID) - Number(b.ID);
+  return Number(a.send_time) - Number(b.send_time);
+}
+
+export function mergeMessages(incoming) {
+  const cur = conversationsStore.get();
+  const messages = [...cur.messages];
+  for (const msg of incoming) {
+    if (msg.msg_id && messages.some(m => m.msg_id && String(m.msg_id) === String(msg.msg_id))) continue;
+    const optimistic = msg.client_msg_id && messages.findIndex(m => !m.msg_id && m.client_msg_id === msg.client_msg_id);
+    if (typeof optimistic === 'number' && optimistic >= 0) messages.splice(optimistic, 1);
+    messages.push(msg);
+  }
+  messages.sort(compareMessages);
+  conversationsStore.set({ messages });
 }
 
 export function setMessages(list) {
@@ -17,35 +38,43 @@ export function setMessages(list) {
 }
 
 // 追加一条消息（去重 + 时间排序）
-// 若新消息带 msg_id，会替换同 from_uid+content 的本地乐观消息（无 msg_id），避免重复
+// 服务端回显用 client_msg_id 精确替换乐观消息，避免相同内容相互覆盖。
 export function pushMessage(msg) {
   const cur = conversationsStore.get();
 
   if (msg.msg_id) {
     const exists = cur.messages.some(m =>
       m.msg_id && String(m.msg_id) === String(msg.msg_id));
-    if (exists) return cur.messages;
+    if (exists) {
+      const next = cur.messages.filter(m => !(!m.msg_id && msg.client_msg_id && m.client_msg_id === msg.client_msg_id));
+      if (next.length !== cur.messages.length) conversationsStore.set({ messages: next });
+      return next;
+    }
 
-    // 去掉同发送者同内容的乐观消息（send_time 接近）
-    const now = new Date(msg.send_time).getTime();
     const filtered = cur.messages.filter(m => {
-      if (m.msg_id) return true;
-      const sameSender = String(m.from_uid) === String(msg.from_uid);
-      const sameContent = m.content === msg.content;
-      const nearTime = Math.abs(new Date(m.send_time).getTime() - now) < 60000;
-      return !(sameSender && sameContent && nearTime);
+      return !(!m.msg_id && msg.client_msg_id && m.client_msg_id === msg.client_msg_id);
     });
 
-    const next = filtered.concat(msg).sort((a, b) =>
-      new Date(a.send_time) - new Date(b.send_time));
+    const next = filtered.concat(msg).sort(compareMessages);
     conversationsStore.set({ messages: next });
     return next;
   }
 
-  const next = cur.messages.concat(msg).sort((a, b) =>
-    new Date(a.send_time) - new Date(b.send_time));
+  const next = cur.messages.concat(msg).sort(compareMessages);
   conversationsStore.set({ messages: next });
   return next;
+}
+
+export function markMessageFailed(clientMsgID) {
+  const cur = conversationsStore.get();
+  conversationsStore.set({ messages: cur.messages.map(m =>
+    m.client_msg_id === clientMsgID && !m.msg_id ? { ...m, failed: true } : m) });
+}
+
+export function markMessagePending(clientMsgID) {
+  const cur = conversationsStore.get();
+  conversationsStore.set({ messages: cur.messages.map(m =>
+    m.client_msg_id === clientMsgID && !m.msg_id ? { ...m, failed: false } : m) });
 }
 
 // 更新消息内容（E2EE 解密后替换密文）

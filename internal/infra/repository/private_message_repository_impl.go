@@ -19,7 +19,7 @@ func (r *PrivateMessageRepositoryImpl) Create(message *entity.PrivateMessage) er
 func (r *PrivateMessageRepositoryImpl) FindConversation(uid1, uid2 string, limit, offset int) ([]*entity.PrivateMessage, error) {
 	var messages []*entity.PrivateMessage
 	err := database.DB.Where("(from_uid = ? AND to_uid = ?) OR (from_uid = ? AND to_uid = ?)", uid1, uid2, uid2, uid1).
-		Order("send_time DESC").
+		Order("seq DESC, id DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&messages).Error

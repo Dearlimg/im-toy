@@ -24,6 +24,7 @@ type GroupMember struct {
 type GroupMessage struct {
 	gorm.Model
 	MsgID    string `gorm:"index;unique;size:64" json:"msg_id"`
+	Seq      uint64 `gorm:"index" json:"seq"`
 	GroupID  string `gorm:"size:64;index:idx_group_id_send_time" json:"group_id"`
 	FromUID  string `gorm:"size:64;index" json:"from_uid"`
 	Content  string `gorm:"type:text" json:"content"`

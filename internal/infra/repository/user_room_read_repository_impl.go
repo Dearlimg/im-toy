@@ -43,14 +43,8 @@ func (r *UserRoomReadRepositoryImpl) FindByUIDAndRoomID(uid, roomID string) (*en
 
 func (r *UserRoomReadRepositoryImpl) GetUnreadCount(uid, roomID string, lastMsgID string) (int64, error) {
 	var count int64
-	record, _ := r.FindByUIDAndRoomID(uid, roomID)
-	if record == nil || record.LastReadMsgID == "" {
-		return 0, nil
-	}
-
 	err := database.DB.Model(&entity.PrivateMessage{}).
-		Where("msg_id > ? AND ((from_uid = ? AND to_uid = ?) OR (from_uid = ? AND to_uid = ?))",
-			record.LastReadMsgID, uid, roomID, roomID, uid).
+		Where("from_uid = ? AND to_uid = ? AND `read` = ?", roomID, uid, 0).
 		Count(&count).Error
 	return count, err
 }

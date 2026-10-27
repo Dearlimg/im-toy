@@ -60,7 +60,18 @@ export function renderMessageBubble(msg, isSelf, peerOnline) {
     const check = document.createElement('span');
     check.className = 'msg-check';
     check.textContent = '\u2713';
-    if (msg.is_read) {
+    if (msg.failed) {
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'retry-message';
+      retry.textContent = '发送失败，点击重试';
+      retry.addEventListener('click', () => window.dispatchEvent(new CustomEvent('im-retry-message', {
+        detail: { clientMsgID: msg.client_msg_id }
+      })));
+      status.appendChild(retry);
+    } else if (msg.read_count != null) {
+      status.textContent = '已读 ' + msg.read_count + '/' + (msg.total_count ?? 0);
+    } else if (msg.is_read) {
       const check2 = document.createElement('span');
       check2.className = 'msg-check msg-check-read';
       check2.textContent = '\u2713';

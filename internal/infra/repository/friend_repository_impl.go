@@ -34,7 +34,7 @@ func (r *FriendRepositoryImpl) FindByUIDAndFriendUID(uid, friendUID string) (*en
 func (r *FriendRepositoryImpl) FindFriendsWithUserInfo(uid string) ([]map[string]interface{}, error) {
 	var results []map[string]interface{}
 	err := database.DB.Table("friends").
-		Select("friends.*, users.username, users.nickname, users.avatar, users.pubkey").
+		Select("friends.*, users.username, users.nickname, users.avatar, users.pub_key").
 		Joins("LEFT JOIN users ON users.uid = friends.friend_uid").
 		Where("friends.uid = ? AND friends.status = ?", uid, 1).
 		Find(&results).Error

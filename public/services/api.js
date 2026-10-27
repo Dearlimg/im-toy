@@ -11,7 +11,8 @@ export const login = (username, password) =>
   http.post('/api/user/login', { username, password });
 
 // ---- E2EE ----
-export const registerPubKey = (pubkey) => http.post('/api/e2ee/pubkey', { pubkey });
+export const getPubKey = () => http.get('/api/e2ee/pubkey');
+export const registerPubKey = (pubkey, replace = false) => http.post('/api/e2ee/pubkey', { pubkey, replace });
 
 // ---- 好友 ----
 export const friendList = () => http.get('/api/friend/list');
@@ -32,6 +33,15 @@ export const privateConversation = (friendUid) =>
 
 export const groupMessages = (groupId, limit) =>
   http.get('/api/group/messages?group_id=' + encodeURIComponent(groupId) + '&limit=' + (limit || 50));
+
+export const syncMessages = (type, id, options = {}) => {
+  const path = type === 'friend' ? '/api/sync/private?friend_uid=' : '/api/sync/group?group_id=';
+  const query = new URLSearchParams({ limit: '50' });
+  if (options.tail) query.set('tail', '1');
+  if (options.cursor) query.set('cursor', options.cursor);
+  if (options.before) query.set('before', options.before);
+  return http.get(path + encodeURIComponent(id) + '&' + query.toString());
+};
 
 export const readStatus = (roomId) =>
   http.get('/api/message/read-status?room_id=' + encodeURIComponent(roomId));

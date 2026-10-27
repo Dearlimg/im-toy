@@ -1,0 +1,33 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: local-root-only
+      MYSQL_DATABASE: im_chat
+      MYSQL_USER: imchat
+      MYSQL_PASSWORD: imchat-dev-only
+    ports: ["127.0.0.1:3307:3306"]
+    volumes: ["im_mysql:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    ports: ["127.0.0.1:6380:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  backend:
+    build: .
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["./config/config.docker.example.yaml:/app/config/config.yaml:ro"]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: on-failure
+volumes:
+  im_mysql:

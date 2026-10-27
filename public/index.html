@@ -3,10 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IM</title>
+<title>微聊 · IM</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="styles/base.css">
 <link rel="stylesheet" href="styles/layout.css">
 <link rel="stylesheet" href="styles/components.css">
+<link rel="stylesheet" href="styles/visual.css">
 </head>
 <body>
 
@@ -14,7 +16,8 @@
 <div id="authPage">
   <div class="auth-card">
     <div class="auth-logo">聊</div>
-    <div class="auth-title">IM · 简易聊天</div>
+    <div class="auth-title">微聊</div>
+    <p class="auth-subtitle">与你关心的人，保持联系</p>
     <div class="auth-tabs">
       <button type="button" id="tabLogin" class="active">登录</button>
       <button type="button" id="tabReg">注册</button>
@@ -56,7 +59,7 @@
     <div class="sidebar-search">
       <div class="search-box">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
-        <input id="searchInput" placeholder="搜索用户并添加">
+        <input id="searchInput" aria-label="搜索用户并添加" placeholder="搜索用户并添加">
       </div>
     </div>
     <div class="side-tabs">
@@ -70,8 +73,8 @@
   <main id="chatArea">
     <header id="chatHeader">
       <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-        <button class="icon-btn" id="backBtn" title="返回">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <button class="icon-btn" id="menuBtn" type="button" title="打开会话列表" aria-label="打开会话列表">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
         <div id="chatTitle">微聊</div>
       </div>
@@ -83,7 +86,7 @@
     </header>
 
     <div id="chatMessages">
-      <div class="empty-tip" id="chatEmptyTip">选择一个对话开始聊天</div>
+      <div class="empty-tip chat-empty" id="chatEmptyTip"><span class="chat-empty-icon" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M8 22c0-8 7-14 16-14s16 6 16 14-7 14-16 14c-2 0-4-.3-6-1l-6 3 1-6c-3-2-5-6-5-10Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><circle cx="18" cy="22" r="1.5" fill="currentColor"/><circle cx="24" cy="22" r="1.5" fill="currentColor"/><circle cx="30" cy="22" r="1.5" fill="currentColor"/></svg></span><strong>开始一段对话</strong><span>从左侧选择联系人或群聊</span></div>
     </div>
 
     <div id="chatInput">
@@ -97,7 +100,7 @@
         <input type="file" id="fileInput" accept="image/*" style="display:none">
       </div>
       <div class="input-row">
-        <textarea id="messageInput" rows="1" placeholder="输入消息…"></textarea>
+        <textarea id="messageInput" rows="1" aria-label="消息内容" placeholder="输入消息…"></textarea>
         <button class="btn-send" id="sendBtn">发送</button>
       </div>
     </div>

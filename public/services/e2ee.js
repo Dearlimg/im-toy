@@ -1,12 +1,16 @@
-// E2EE：X25519 密钥交换 + AES-GCM 端到端加密
+// E2EE：ECDH P-256 密钥交换 + AES-GCM 端到端加密
 // 密钥对在浏览器本地生成并持久化（localStorage），私钥永不出浏览器；
 // 公钥注册到服务器用于好友间交换（公钥公开，服务器拿到无碍）。
 // 消息格式：enc.<iv_b64url>.<ct_b64url>，服务器只存/转发"不透明字符串"。
 // 注意：清空浏览器存储会丢失私钥，历史加密消息将无法解密（E2EE 固有特性）。
+// 算法说明：ECDH P-256 是 Web Crypto 全浏览器支持的标准算法（Chrome 37+）；
+// 曾用 X25519（Chrome 124+/Firefox 127+），旧密钥不兼容，故存储 key 版本为 v2。
 
-import { registerPubKey } from './api.js';
+import { getPubKey, registerPubKey } from './api.js';
 
-const KEY_STORAGE = 'im_e2ee_keypair_v1';
+const KEY_STORAGE = 'im_e2ee_keypair_v2';
+let accountStorage = KEY_STORAGE;
+const CURVE = { name: 'ECDH', namedCurve: 'P-256' };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -30,11 +34,11 @@ export function isEncrypted(content) {
 }
 
 function getKeyPair() {
-  try { return JSON.parse(localStorage.getItem(KEY_STORAGE) || 'null'); } catch (e) { return null; }
+  try { return JSON.parse(localStorage.getItem(accountStorage) || 'null'); } catch (e) { return null; }
 }
 
 async function generateKeyPair() {
-  const kp = await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+  const kp = await crypto.subtle.generateKey(CURVE, true, ['deriveBits']);
   const rawPub = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
   const rawPriv = new Uint8Array(await crypto.subtle.exportKey('pkcs8', kp.privateKey));
   return { pubkey: b64url(rawPub), priv: b64url(rawPriv) };
@@ -45,7 +49,7 @@ export async function initE2EE() {
   if (!window.crypto || !crypto.subtle) return false;
   if (getKeyPair()) return true;
   try {
-    localStorage.setItem(KEY_STORAGE, JSON.stringify(await generateKeyPair()));
+    localStorage.setItem(accountStorage, JSON.stringify(await generateKeyPair()));
     return true;
   } catch (e) {
     console.warn('E2EE not supported:', e);
@@ -53,14 +57,34 @@ export async function initE2EE() {
   }
 }
 
-// 确保密钥对存在并注册公钥到服务器；浏览器不支持 E2EE 时返回 false（降级明文）
-export async function ensureE2EE() {
+// 每个账号单独保存设备密钥。新设备替换公钥需要明确确认。
+export async function ensureE2EE(uid) {
+  if (!uid) return false;
+  accountStorage = KEY_STORAGE + ':' + uid;
+  let serverKey;
+  try {
+    serverKey = (await getPubKey()).pubkey || '';
+    const legacy = JSON.parse(localStorage.getItem(KEY_STORAGE) || 'null');
+    if (!getKeyPair() && legacy && legacy.pubkey === serverKey) {
+      localStorage.setItem(accountStorage, JSON.stringify(legacy));
+    }
+  } catch (e) {
+    console.warn('could not check registered key:', e);
+    return false;
+  }
   const ok = await initE2EE();
   if (!ok) return false;
+  const localKey = getKeyPair().pubkey;
+  let replace = false;
+  if (serverKey && serverKey !== localKey) {
+    replace = window.confirm('此账号已有其他设备的加密密钥。本设备没有对应私钥。替换后旧设备及历史密文可能无法解密，好友需要重新核验指纹。确认替换？');
+    if (!replace) return false;
+  }
   try {
-    await registerPubKey(getKeyPair().pubkey);
+    await registerPubKey(localKey, replace);
   } catch (e) {
     console.warn('pubkey register failed:', e);
+    return false;
   }
   return true;
 }
@@ -68,13 +92,13 @@ export async function ensureE2EE() {
 async function deriveShared(peerPubB64url) {
   const kp = getKeyPair();
   if (!kp) return null;
-  const peerKey = await crypto.subtle.importKey('raw', unb64url(peerPubB64url), { name: 'X25519' }, false, ['deriveBits']);
-  const privKey = await crypto.subtle.importKey('pkcs8', unb64url(kp.priv), { name: 'X25519' }, false, ['deriveBits']);
-  const shared = await crypto.subtle.deriveBits({ name: 'X25519', public: peerKey }, privKey, 256);
+  const peerKey = await crypto.subtle.importKey('raw', unb64url(peerPubB64url), CURVE, false, []);
+  const privKey = await crypto.subtle.importKey('pkcs8', unb64url(kp.priv), CURVE, false, ['deriveBits']);
+  const shared = await crypto.subtle.deriveBits({ name: 'ECDH', public: peerKey }, privKey, 256);
   return new Uint8Array(shared);
 }
 
-// 用对方公钥加密；失败返回 null（调用方降级明文）
+// 用对方公钥加密；失败返回 null，由调用方阻止发送。
 export async function encryptContent(peerPub, text) {
   try {
     const shared = await deriveShared(peerPub);
@@ -105,15 +129,29 @@ export async function decryptContent(peerPub, content) {
   }
 }
 
-// 公钥指纹（SHA-256 前 4 字节 → 8 位 hex，如 A1B2-C3D4），用于双方人工比对防中间人
+// 128 位公钥指纹；需要通过独立可信渠道核对。
 export async function fingerprint(pubkey) {
   if (!pubkey) return '';
   try {
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', unb64url(pubkey)));
     let hex = '';
-    for (let i = 0; i < 4; i++) hex += digest[i].toString(16).padStart(2, '0');
+    for (let i = 0; i < 16; i++) hex += digest[i].toString(16).padStart(2, '0');
     return hex.toUpperCase().replace(/(.{4})/g, '$1-').replace(/-$/, '');
   } catch (e) {
     return '';
   }
+}
+
+// Pin only after the user confirms an out-of-band comparison; changed keys are never silently accepted.
+export async function verifyPeerKey(uid, peerUID, pubkey) {
+  const pinKey = 'im_e2ee_peer:' + uid + ':' + peerUID;
+  const previous = localStorage.getItem(pinKey);
+  if (previous === pubkey) return true;
+  const peerFingerprint = await fingerprint(pubkey);
+  const ownFingerprint = await fingerprint(getKeyPair()?.pubkey);
+  if (!peerFingerprint || !ownFingerprint) return false;
+  const change = previous ? '好友密钥发生变化，旧消息可能无法解密。' : '首次向该好友发送加密消息。';
+  const accepted = window.confirm(change + '\n请通过其他可信渠道与好友核对指纹。\n好友：' + peerFingerprint + '\n自己：' + ownFingerprint + '\n\n双方指纹已核对一致？');
+  if (accepted) localStorage.setItem(pinKey, pubkey);
+  return accepted;
 }
