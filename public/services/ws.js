@@ -137,6 +137,12 @@ function handleMessage(msg) {
     case 'read_receipt':
       emit('readReceipt', msg);
       break;
+    case 'delivery_receipt':
+      emit('deliveryReceipt', msg);
+      break;
+    case 'delivery_ack':
+      emit('deliveryAck', msg);
+      break;
     case 'group_read_receipt':
       emit('groupReadReceipt', msg);
       break;

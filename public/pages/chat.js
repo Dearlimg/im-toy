@@ -4,7 +4,7 @@
 import { authStore, loadSession, clearSession } from '../store/auth.js';
 import { setCurrentFriend, updateFriendOnline, findFriend } from '../store/friends.js';
 import { setCurrentGroup } from '../store/groups.js';
-import { conversationsStore, openConversation, pushMessage, mergeMessages, updateMessageRead, updateMessageContent, markMessageFailed, markMessagePending } from '../store/conversations.js';
+import { conversationsStore, openConversation, pushMessage, mergeMessages, updateMessageRead, updateMessageDelivered, applyDeliveryStatuses, updateMessageContent, markMessageFailed, markMessagePending } from '../store/conversations.js';
 import { ensureE2EE, encryptContent, decryptContent, isEncrypted, verifyPeerKey } from '../services/e2ee.js';
 import { unreadStore, setPrivateUnread, increment, clear, totalCount } from '../store/unread.js';
 
@@ -14,9 +14,10 @@ import { updateHeader, renderAll, scrollToBottom, setUidProvider, setPeerOnlineP
 import { initInput, setSendHandler } from '../components/business/ChatInput.js';
 import { Toast } from '../components/common/Toast.js';
 
-import { syncMessages, privateUnreadCounts, friendSearch, friendAdd } from '../services/api.js';
+import { syncMessages, privateUnreadCounts, privateUndelivered, privateMessageStatuses, friendSearch, friendAdd } from '../services/api.js';
 import { openModal } from '../components/common/Modal.js';
-import { connect, disconnect, onMessage, send } from '../services/ws.js';
+import { connect, disconnect, onMessage, send, isOpen } from '../services/ws.js';
+import { createDeliveryQueue } from '../services/delivery.js';
 
 const app = document.getElementById('app');
 const authPage = document.getElementById('authPage');
@@ -29,6 +30,10 @@ let e2eeReady = false;
 let pendingMessages = new Map();
 let failedMessages = new Set();
 let syncState = null;
+let deliveryQueue = null;
+let inboxLoading = false;
+let inboxTimer = null;
+const readReceiptsSent = new Map();
 function savePending() {
   try { localStorage.setItem('im_pending:' + myUid, JSON.stringify({ pending: [...pendingMessages], failed: [...failedMessages] })); } catch (e) { console.warn('pending messages not saved', e); }
 }
@@ -82,6 +87,7 @@ async function enterApp() {
   const u = authStore.get().user || {};
   myUid = u.uid;
   loadPending();
+  deliveryQueue = createDeliveryQueue(myUid, send);
   meNick.textContent = u.nickname || u.username || '我';
   meAvatar.textContent = (u.nickname || u.username || '我').charAt(0).toUpperCase();
 
@@ -120,6 +126,7 @@ async function selectFriend(f) {
   peerOnline = !!f.is_online;
   updateHeader('friend', f);
   await loadHistory('friend', f.friend_uid);
+  if (conversationsStore.get().chatType !== 'friend' || String(conversationsStore.get().chatId) !== String(f.friend_uid)) return;
   sendReadReceipts();
   render();
   renderAll();
@@ -132,6 +139,7 @@ async function selectGroup(g) {
   peerOnline = false;
   updateHeader('group', g);
   await loadHistory('group', g.group_id);
+  if (conversationsStore.get().chatType !== 'group' || String(conversationsStore.get().chatId) !== String(g.group_id)) return;
   sendReadReceipts();
   render();
   renderAll();
@@ -145,6 +153,7 @@ async function loadHistory(chatType, id) {
     let list = (page.messages || []).map(m => ({ ...m, acked: true }));
     if (chatType === 'friend') list = await Promise.all(list.map(m => resolveCipher(m, id)));
     if (syncState !== state) return;
+    if (chatType === 'friend') list.forEach(m => deliveryQueue?.enqueue(m));
     state.cursor = page.next_cursor || '';
     state.older = page.older_cursor || '';
     // Preserve real-time arrivals and pending messages while the history request was in flight.
@@ -178,6 +187,7 @@ async function syncCurrent() {
       const messages = state.chatType === 'friend'
         ? await Promise.all(rows.map(msg => resolveCipher(msg, state.id))) : rows;
       if (syncState !== state) return;
+      if (state.chatType === 'friend') messages.forEach(m => deliveryQueue?.enqueue(m));
       mergeMessages(messages);
       state.cursor = page.next_cursor || state.cursor;
       more = !!page.has_more;
@@ -199,9 +209,11 @@ async function loadOlder() {
       ? await Promise.all(rows.map(m => resolveCipher(m, state.id)))
       : rows;
     if (syncState !== state) return;
+    if (state.chatType === 'friend') list.forEach(m => deliveryQueue?.enqueue(m));
     state.older = page.next_cursor || state.older;
     mergeMessages(list);
     conversationsStore.set({ hasOlder: !!page.has_more });
+    sendReadReceipts();
   } catch (e) {
     Toast('加载更早消息失败：' + e.message);
   }
@@ -210,20 +222,87 @@ async function loadOlder() {
 // 对当前会话中"对方发来且未读"的消息补发已读回执，
 // 让对方实时看到单对号 → 双对号（覆盖离线期间收到的消息）
 function sendReadReceipts() {
+  if (document.visibilityState === 'hidden' || !document.hasFocus()) return;
   const st = conversationsStore.get();
+  const viewport = document.getElementById('chatMessages');
+  if (!viewport) return;
+  const bounds = viewport.getBoundingClientRect();
+  const visibleIDs = new Set();
+  viewport.querySelectorAll('[data-msg-id]').forEach(row => {
+    const rect = row.getBoundingClientRect();
+    if (rect.bottom > bounds.top && rect.top < bounds.bottom && rect.height > 0) visibleIDs.add(row.dataset.msgId);
+  });
+  const now = Date.now();
+  const eligible = m => m.msg_id && visibleIDs.has(String(m.msg_id)) && String(m.from_uid) !== String(myUid) &&
+    now - (readReceiptsSent.get(String(m.msg_id)) || 0) >= 30000;
   if (st.chatType === 'group') {
-    const ids = (st.messages || []).filter(m => m.msg_id && String(m.from_uid) !== String(myUid)).map(m => m.msg_id);
+    const ids = (st.messages || []).filter(eligible).map(m => m.msg_id);
     for (let i = 0; i < ids.length; i += 200) {
-      send({ type: 'group_read_receipt', group_id: st.chatId, msg_ids: ids.slice(i, i + 200) });
+      const batch = ids.slice(i, i + 200);
+      if (send({ type: 'group_read_receipt', group_id: st.chatId, msg_ids: batch })) batch.forEach(id => readReceiptsSent.set(String(id), now));
     }
     return;
   }
   (st.messages || []).forEach(m => {
-    if (m.msg_id && String(m.from_uid) !== String(myUid) && !m.is_read) {
-      send({ type: 'read_receipt', msg_id: m.msg_id, from_uid: m.from_uid });
+    if (eligible(m) && !m.is_read && !isEncrypted(m.content)) {
+      if (send({ type: 'read_receipt', msg_id: m.msg_id, from_uid: m.from_uid })) readReceiptsSent.set(String(m.msg_id), now);
     }
   });
 }
+
+async function drainUndelivered() {
+  if (!deliveryQueue || inboxLoading || !isOpen()) return;
+  inboxLoading = true;
+  let hasMore = false;
+  try {
+    const page = await privateUndelivered();
+    hasMore = !!page.has_more;
+    for (const message of page.messages || []) deliveryQueue.enqueue(message);
+  } catch (e) {
+    console.warn('Could not sync undelivered messages:', e);
+  } finally {
+    inboxLoading = false;
+    if (hasMore && !deliveryQueue.size()) scheduleInboxSync();
+  }
+}
+
+function scheduleInboxSync() {
+  clearTimeout(inboxTimer);
+  inboxTimer = setTimeout(drainUndelivered, 150);
+}
+
+async function refreshVisibleStatuses() {
+  const state = syncState;
+  if (!state || state.chatType !== 'friend') return;
+  const ids = conversationsStore.get().messages.filter(m => m.msg_id && String(m.from_uid) === String(myUid)).map(m => m.msg_id);
+  try {
+    for (let i = 0; i < ids.length; i += 100) {
+      const result = await privateMessageStatuses(ids.slice(i, i + 100));
+      if (syncState !== state) return;
+      applyDeliveryStatuses(result.messages || []);
+    }
+  } catch (e) {
+    console.warn('Could not refresh delivery status:', e);
+  }
+}
+
+window.addEventListener('focus', () => { sendReadReceipts(); refreshVisibleStatuses(); });
+let readScrollTimer;
+document.getElementById('chatMessages').addEventListener('scroll', () => {
+  clearTimeout(readScrollTimer);
+  readScrollTimer = setTimeout(sendReadReceipts, 100);
+}, { passive: true });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') sendReadReceipts();
+});
+// Reconcile dropped acknowledgements and status notifications without waiting
+// for the socket to disconnect. The history remains the source of truth.
+setInterval(() => {
+  if (!myUid || !isOpen()) return;
+  deliveryQueue?.flush();
+  drainUndelivered();
+  if (document.visibilityState !== 'hidden') refreshVisibleStatuses();
+}, 15000);
 
 // ============ 发送消息 ============
 async function handleSend(content) {
@@ -296,8 +375,18 @@ function handleWsEvent(type, msg) {
   const st = conversationsStore.get();
   switch (type) {
     case 'connect':
+      readReceiptsSent.clear();
       for (const [id, payload] of pendingMessages) if (!failedMessages.has(id)) send(payload);
-      syncCurrent().then(sendReadReceipts);
+      deliveryQueue?.flush();
+      drainUndelivered();
+      syncCurrent().then(() => { sendReadReceipts(); return refreshVisibleStatuses(); });
+      break;
+    case 'deliveryReceipt':
+      updateMessageDelivered(msg.msg_id);
+      break;
+    case 'deliveryAck':
+      deliveryQueue?.acknowledge(msg.msg_id);
+      scheduleInboxSync();
       break;
     case 'sendFailed':
       failedMessages.add(msg.client_msg_id);
@@ -309,6 +398,7 @@ function handleWsEvent(type, msg) {
       const fromMe = String(msg.from_uid) === String(myUid);
       const toMe = String(msg.to_uid) === String(myUid);
       if (!fromMe && !toMe) return;
+      if (toMe) deliveryQueue?.enqueue(msg);
       // 服务端回显给发送方时标记 acked
       if (fromMe) {
         msg.acked = true;
@@ -331,14 +421,20 @@ function handleWsEvent(type, msg) {
         } else {
           // 对方消息：解密后入列（DB 存密文，界面展示明文）
           resolveCipher(msg, peerUid).then(m => {
+            const current = conversationsStore.get();
+            if (current.chatType !== 'friend' || String(current.chatId) !== String(peerUid)) {
+              increment('friend', peerUid);
+              return;
+            }
             pushMessage(m);
-            send({ type: 'read_receipt', msg_id: msg.msg_id, from_uid: msg.from_uid });
+            sendReadReceipts();
             renderAll();
             scrollToBottom();
+            requestAnimationFrame(sendReadReceipts);
           });
         }
       } else {
-        increment('friend', peerUid);
+        if (!fromMe) increment('friend', peerUid);
       }
       break;
     }
@@ -355,11 +451,10 @@ function handleWsEvent(type, msg) {
       const isCurrent = st.chatType === 'group' && String(st.chatId) === String(gid);
       if (isCurrent) {
         pushMessage(msg);
-        if (String(msg.from_uid) !== String(myUid)) {
-          send({ type: 'group_read_receipt', group_id: gid, msg_ids: [msg.msg_id] });
-        }
+        if (String(msg.from_uid) !== String(myUid)) sendReadReceipts();
         renderAll();
         scrollToBottom();
+        requestAnimationFrame(sendReadReceipts);
       } else {
         increment('group', gid);
       }

@@ -42,6 +42,8 @@ func RegisterRoutes(r *gin.Engine) {
 
 		auth.POST("/private/send", container.PrivateMsgHandler.SendMessage)
 		auth.GET("/private/conversation", container.PrivateMsgHandler.GetConversation)
+		auth.GET("/private/undelivered", container.PrivateMsgHandler.GetUndelivered)
+		auth.GET("/private/status", container.PrivateMsgHandler.GetPrivateStatus)
 		auth.GET("/private/unread-counts", container.PrivateMsgHandler.GetUnreadCounts)
 		auth.POST("/private/mark-read", container.PrivateMsgHandler.MarkAsRead)
 		auth.GET("/sync/private", handler.SyncPrivate)

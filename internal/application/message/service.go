@@ -38,6 +38,8 @@ type Result struct {
 	MsgID     string `json:"msg_id"`
 	Seq       uint64 `json:"seq"`
 	SendTime  int64  `json:"send_time"`
+	Delivered bool   `json:"delivered"`
+	IsRead    bool   `json:"is_read"`
 	Duplicate bool   `json:"-"`
 }
 
@@ -166,7 +168,16 @@ func Send(ctx context.Context, db *gorm.DB, in Input) (Result, error) {
 		if stored.Fingerprint != request.Fingerprint {
 			return result, ErrConflict
 		}
-		return Result{MsgID: stored.MsgID, Seq: stored.Seq, SendTime: stored.SendTime, Duplicate: true}, nil
+		result := Result{MsgID: stored.MsgID, Seq: stored.Seq, SendTime: stored.SendTime, Duplicate: true}
+		if in.Kind == "private" {
+			var msg entity.PrivateMessage
+			if lookupErr := db.WithContext(ctx).Where("msg_id = ? AND from_uid = ? AND to_uid = ?", stored.MsgID, in.SenderUID, in.TargetID).First(&msg).Error; lookupErr != nil {
+				return Result{}, fmt.Errorf("load stored message: %w", lookupErr)
+			}
+			result.IsRead = msg.Read == 1
+			result.Delivered = msg.Delivered || result.IsRead
+		}
+		return result, nil
 	}
 	return Result{MsgID: request.MsgID, Seq: request.Seq, SendTime: request.SendTime}, nil
 }

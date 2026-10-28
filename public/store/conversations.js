@@ -24,7 +24,13 @@ export function mergeMessages(incoming) {
   const cur = conversationsStore.get();
   const messages = [...cur.messages];
   for (const msg of incoming) {
-    if (msg.msg_id && messages.some(m => m.msg_id && String(m.msg_id) === String(msg.msg_id))) continue;
+    const existing = msg.msg_id ? messages.findIndex(m => m.msg_id && String(m.msg_id) === String(msg.msg_id)) : -1;
+    if (existing >= 0) {
+      const current = messages[existing];
+      messages[existing] = { ...current, delivered: !!(current.delivered || msg.delivered || current.is_read || msg.is_read),
+        is_read: !!(current.is_read || msg.is_read) };
+      continue;
+    }
     const optimistic = msg.client_msg_id && messages.findIndex(m => !m.msg_id && m.client_msg_id === msg.client_msg_id);
     if (typeof optimistic === 'number' && optimistic >= 0) messages.splice(optimistic, 1);
     messages.push(msg);
@@ -46,8 +52,11 @@ export function pushMessage(msg) {
     const exists = cur.messages.some(m =>
       m.msg_id && String(m.msg_id) === String(msg.msg_id));
     if (exists) {
-      const next = cur.messages.filter(m => !(!m.msg_id && msg.client_msg_id && m.client_msg_id === msg.client_msg_id));
-      if (next.length !== cur.messages.length) conversationsStore.set({ messages: next });
+      const next = cur.messages.filter(m => !(!m.msg_id && msg.client_msg_id && m.client_msg_id === msg.client_msg_id))
+        .map(m => String(m.msg_id) === String(msg.msg_id)
+          ? { ...m, is_read: !!(m.is_read || msg.is_read), delivered: !!(m.delivered || msg.delivered || m.is_read || msg.is_read) }
+          : m);
+      conversationsStore.set({ messages: next });
       return next;
     }
 
@@ -99,7 +108,8 @@ export function updateMessageRead(msgId, isRead, readCount, totalCount) {
   const messages = cur.messages.map(m => {
     if (String(m.msg_id) === String(msgId)) {
       return Object.assign({}, m, {
-        is_read: isRead != null ? isRead : m.is_read,
+        is_read: !!(m.is_read || isRead),
+        delivered: !!(m.delivered || m.is_read || isRead),
         read_count: readCount != null ? readCount : m.read_count,
         total_count: totalCount != null ? totalCount : m.total_count
       });
@@ -107,4 +117,21 @@ export function updateMessageRead(msgId, isRead, readCount, totalCount) {
     return m;
   });
   conversationsStore.set({ messages });
+}
+
+export function updateMessageDelivered(msgId) {
+  const cur = conversationsStore.get();
+  conversationsStore.set({ messages: cur.messages.map(m =>
+    String(m.msg_id) === String(msgId) ? { ...m, delivered: true } : m) });
+}
+
+export function applyDeliveryStatuses(statuses) {
+  const byId = new Map(statuses.map(status => [String(status.msg_id), status]));
+  const cur = conversationsStore.get();
+  conversationsStore.set({ messages: cur.messages.map(msg => {
+    const status = byId.get(String(msg.msg_id));
+    if (!status) return msg;
+    const isRead = !!(msg.is_read || status.is_read);
+    return { ...msg, is_read: isRead, delivered: !!(msg.delivered || status.delivered || isRead) };
+  }) });
 }

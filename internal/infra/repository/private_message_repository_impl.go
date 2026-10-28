@@ -34,7 +34,7 @@ func (r *PrivateMessageRepositoryImpl) FindConversation(uid1, uid2 string, limit
 func (r *PrivateMessageRepositoryImpl) MarkAsRead(fromUID, toUID string) error {
 	return database.DB.Model(&entity.PrivateMessage{}).
 		Where("from_uid = ? AND to_uid = ? AND `read` = ?", fromUID, toUID, 0).
-		Update("read", 1).Error
+		Updates(map[string]interface{}{"read": 1, "delivered": true}).Error
 }
 
 func (r *PrivateMessageRepositoryImpl) GetUnreadCount(uid string) (int64, error) {

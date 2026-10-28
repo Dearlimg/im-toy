@@ -29,29 +29,32 @@ func TestPrivateSyncTailAndCatchup(t *testing.T) {
 	database.DB = db
 	defer func() { database.DB = previous }()
 
-	columns := []string{"id", "msg_id", "seq", "from_uid", "to_uid", "content", "send_time"}
+	columns := []string{"id", "msg_id", "seq", "from_uid", "to_uid", "content", "send_time", "read", "delivered"}
 	mock.ExpectQuery("SELECT .* FROM `private_messages`.*ORDER BY seq DESC, id DESC").
 		WithArgs("alice", "bob", "bob", "alice", 3).
 		WillReturnRows(sqlmock.NewRows(columns).
-			AddRow(3, "m2", 2, "alice", "bob", "two", 2).
-			AddRow(2, "m1", 1, "bob", "alice", "one", 1).
-			AddRow(1, "legacy", 0, "bob", "alice", "legacy", 0))
+			AddRow(3, "m2", 2, "alice", "bob", "two", 2, 1, false).
+			AddRow(2, "m1", 1, "bob", "alice", "one", 1, 0, false).
+			AddRow(1, "legacy", 0, "bob", "alice", "legacy", 0, 0, false))
 	page := runPrivateSync(t, "/?friend_uid=bob&limit=2&tail=1")
 	if len(page.Messages) != 2 || page.Messages[0].MsgID != "m1" || page.Messages[1].MsgID != "m2" || !page.HasOlder || page.NextCursor == "" {
 		t.Fatalf("unexpected tail: %+v", page)
+	}
+	if page.Messages[0].Delivered || !page.Messages[1].Delivered || !page.Messages[1].IsRead {
+		t.Fatalf("legacy read must imply delivery without claiming unread messages are delivered: %+v", page.Messages)
 	}
 	olderCursor := page.OlderCursor
 	// A forward catch-up begins after the exact server cursor, not a guessed ID.
 	mock.ExpectQuery("SELECT .* FROM `private_messages`.*seq > .*ORDER BY seq ASC, id ASC").
 		WithArgs("alice", "bob", "bob", "alice", 2, 2, 3, 3).
-		WillReturnRows(sqlmock.NewRows(columns).AddRow(4, "m3", 3, "alice", "bob", "three", 3))
+		WillReturnRows(sqlmock.NewRows(columns).AddRow(4, "m3", 3, "alice", "bob", "three", 3, 0, true))
 	page = runPrivateSync(t, "/?friend_uid=bob&limit=2&cursor="+url.QueryEscape(page.NextCursor))
 	if len(page.Messages) != 1 || page.Messages[0].MsgID != "m3" || page.HasMore {
 		t.Fatalf("unexpected catch-up: %+v", page)
 	}
 	mock.ExpectQuery("SELECT .* FROM `private_messages`.*seq < .*ORDER BY seq DESC, id DESC").
 		WithArgs("alice", "bob", "bob", "alice", 1, 1, 2, 3).
-		WillReturnRows(sqlmock.NewRows(columns).AddRow(1, "legacy", 0, "bob", "alice", "legacy", 0))
+		WillReturnRows(sqlmock.NewRows(columns).AddRow(1, "legacy", 0, "bob", "alice", "legacy", 0, 0, false))
 	page = runPrivateSync(t, "/?friend_uid=bob&limit=2&before="+url.QueryEscape(olderCursor))
 	if len(page.Messages) != 1 || page.Messages[0].MsgID != "legacy" || page.HasMore {
 		t.Fatalf("unexpected older page: %+v", page)
@@ -63,7 +66,9 @@ func TestPrivateSyncTailAndCatchup(t *testing.T) {
 
 type testSyncPage struct {
 	Messages []struct {
-		MsgID string `json:"msg_id"`
+		MsgID     string `json:"msg_id"`
+		Delivered bool   `json:"delivered"`
+		IsRead    bool   `json:"is_read"`
 	} `json:"messages"`
 	NextCursor  string `json:"next_cursor"`
 	OlderCursor string `json:"older_cursor"`

@@ -12,6 +12,31 @@ import (
 
 var ErrUnauthorized = errors.New("message or conversation is not accessible")
 
+// MarkDelivered records an explicit receipt from the authenticated recipient.
+// Retrying a receipt is safe; notifying the sender again repairs missed pushes.
+func MarkDelivered(db *gorm.DB, recipient, sender, msgID string) (*entity.PrivateMessage, error) {
+	if db == nil || recipient == "" || sender == "" || msgID == "" || recipient == sender {
+		return nil, ErrUnauthorized
+	}
+	var msg entity.PrivateMessage
+	err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("msg_id = ? AND from_uid = ? AND to_uid = ?", msgID, sender, recipient).First(&msg).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrUnauthorized
+			}
+			return err
+		}
+		return tx.Model(&entity.PrivateMessage{}).
+			Where("id = ? AND (delivered = ? OR delivered IS NULL)", msg.ID, false).
+			Update("delivered", true).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	msg.Delivered = true
+	return &msg, nil
+}
+
 // MarkPrivate records receipt only for a message addressed to reader. It never
 // advances the sender's read state as a side effect of fetching history.
 func MarkPrivate(db *gorm.DB, reader, peer, msgID string) (*entity.PrivateMessage, error) {
@@ -26,7 +51,9 @@ func MarkPrivate(db *gorm.DB, reader, peer, msgID string) (*entity.PrivateMessag
 			}
 			return err
 		}
-		return tx.Model(&entity.PrivateMessage{}).Where("id = ? AND `read` = ?", msg.ID, 0).Update("read", 1).Error
+		return tx.Model(&entity.PrivateMessage{}).
+			Where("id = ? AND (`read` = ? OR delivered = ? OR delivered IS NULL)", msg.ID, 0, false).
+			Updates(map[string]interface{}{"read": 1, "delivered": true}).Error
 	})
 	return &msg, err
 }

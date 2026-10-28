@@ -27,7 +27,9 @@ func TestPrivateReadRequiresRecipient(t *testing.T) {
 	db, mock := testDB(t)
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT .* FROM `private_messages` WHERE .*msg_id = \\? AND from_uid = \\? AND to_uid = \\?.*").WithArgs("m1", "alice", "bob", 1).WillReturnRows(sqlmock.NewRows([]string{"id", "msg_id", "from_uid", "to_uid"}).AddRow(7, "m1", "alice", "bob"))
-	mock.ExpectExec("UPDATE `private_messages`").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE `private_messages` SET `delivered`=\\?,`read`=\\?,`updated_at`=\\?").
+		WithArgs(true, 1, sqlmock.AnyArg(), 7, 0, false).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 	msg, err := MarkPrivate(db, "bob", "alice", "m1")
 	if err != nil || msg.FromUID != "alice" {
@@ -39,6 +41,50 @@ func TestPrivateReadRequiresRecipient(t *testing.T) {
 	_, err = MarkPrivate(db, "mallory", "alice", "m1")
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("expected unauthorized, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeliveryRequiresRecipientAndIsIdempotent(t *testing.T) {
+	db, mock := testDB(t)
+	for i := 0; i < 2; i++ {
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT .* FROM `private_messages` WHERE .*msg_id = \\? AND from_uid = \\? AND to_uid = \\?.*").
+			WithArgs("m1", "alice", "bob", 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "msg_id", "from_uid", "to_uid"}).AddRow(7, "m1", "alice", "bob"))
+		// A duplicate receipt legitimately updates zero rows but is still acknowledged.
+		mock.ExpectExec("UPDATE `private_messages` SET .*`delivered`.*").
+			WillReturnResult(sqlmock.NewResult(0, int64(1-i)))
+		mock.ExpectCommit()
+		msg, err := MarkDelivered(db, "bob", "alice", "m1")
+		if err != nil || !msg.Delivered || msg.FromUID != "alice" {
+			t.Fatalf("valid receipt rejected: %+v, %v", msg, err)
+		}
+	}
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT .* FROM `private_messages` WHERE .*msg_id = \\? AND from_uid = \\? AND to_uid = \\?.*").
+		WithArgs("m1", "alice", "mallory", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectRollback()
+	if _, err := MarkDelivered(db, "mallory", "alice", "m1"); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("non-recipient was allowed to mark a message delivered: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeliveryDatabaseFailureIsNotAcknowledged(t *testing.T) {
+	db, mock := testDB(t)
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT .* FROM `private_messages`").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "msg_id", "from_uid", "to_uid"}).AddRow(7, "m1", "alice", "bob"))
+	mock.ExpectExec("UPDATE `private_messages`").WillReturnError(errors.New("write failed"))
+	mock.ExpectRollback()
+	if msg, err := MarkDelivered(db, "bob", "alice", "m1"); err == nil || msg != nil {
+		t.Fatalf("write failure was reported as success: %+v, %v", msg, err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

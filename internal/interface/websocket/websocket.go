@@ -235,6 +235,8 @@ func (c *Conn) readPump() {
 			handleGroupMessage(c, &wsMsg)
 		case "read_receipt":
 			handleReadReceipt(c, &wsMsg)
+		case "delivery_receipt":
+			handleDeliveryReceipt(c, &wsMsg)
 		case "group_read_receipt":
 			handleGroupReadReceipt(c, &wsMsg)
 		case "heartbeat":
@@ -304,6 +306,8 @@ func PushAcceptedMessage(in message_service.Input, result message_service.Result
 	}
 	if in.Kind == "private" {
 		payload["to_uid"] = in.TargetID
+		payload["delivered"] = result.Delivered
+		payload["is_read"] = result.IsRead
 	} else {
 		payload["group_id"] = in.TargetID
 	}
@@ -335,6 +339,23 @@ func PushAcceptedMessage(in message_service.Input, result message_service.Result
 	}
 }
 
+// A successful acknowledgement is sent only after the receipt is committed.
+func handleDeliveryReceipt(c *Conn, msg *WSMessage) {
+	target, err := readstate.MarkDelivered(database.DB, c.UserID, msg.FromUID, msg.MsgID)
+	if err != nil {
+		log.Printf("delivery receipt rejected: %v", err)
+		return
+	}
+	SendToUser(target.FromUID, map[string]interface{}{
+		"type": "delivery_receipt", "msg_id": msg.MsgID,
+		"read_uid": c.UserID, "delivered": true,
+	})
+	ack, _ := json.Marshal(map[string]interface{}{
+		"type": "delivery_ack", "msg_id": msg.MsgID,
+	})
+	sendToConn(c, ack)
+}
+
 func handleReadReceipt(c *Conn, msg *WSMessage) {
 	roomID := msg.RoomID
 	if roomID == "" {
@@ -350,6 +371,7 @@ func handleReadReceipt(c *Conn, msg *WSMessage) {
 		"msg_id":    msg.MsgID,
 		"read_uid":  c.UserID,
 		"room_id":   roomID,
+		"delivered": true,
 		"read_time": time.Now().UnixMilli(),
 	}
 	SendToUser(target.FromUID, receipt)

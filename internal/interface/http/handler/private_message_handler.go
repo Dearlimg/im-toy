@@ -2,11 +2,13 @@ package handler
 
 import (
 	message_service "im-chat/internal/application/message"
+	"im-chat/internal/domain/entity"
 	domain_repo "im-chat/internal/domain/repository"
 	"im-chat/internal/infra/database"
 	"im-chat/internal/interface/http/response"
 	ws "im-chat/internal/interface/websocket"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,6 +16,65 @@ import (
 type PrivateMessageHandler struct {
 	msgRepo  domain_repo.PrivateMessageRepository
 	readRepo domain_repo.UserRoomReadRepository
+}
+
+// GetUndelivered returns ciphertext/content to the authenticated recipient without marking it read.
+// Receipts are confirmed separately so an interrupted response can be retried.
+func (h *PrivateMessageHandler) GetUndelivered(c *gin.Context) {
+	uid, _ := c.Get("uid")
+	limit := 100
+	if value := c.Query("limit"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 || parsed > 100 {
+			response.InvalidParams(c, "limit must be between 1 and 100")
+			return
+		}
+		limit = parsed
+	}
+	rows := make([]entity.PrivateMessage, 0, limit+1)
+	if err := database.DB.Where("to_uid = ? AND `read` = ? AND (delivered = ? OR delivered IS NULL)", uid.(string), 0, false).
+		Order("id ASC").Limit(limit + 1).Find(&rows).Error; err != nil {
+		response.Failed(c, "获取待接收消息失败")
+		return
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	response.Success(c, gin.H{"messages": rows, "has_more": hasMore})
+}
+
+// GetPrivateStatus returns delivery state only for messages sent by the caller.
+func (h *PrivateMessageHandler) GetPrivateStatus(c *gin.Context) {
+	uid, _ := c.Get("uid")
+	raw := c.Query("msg_ids")
+	ids := strings.Split(raw, ",")
+	if raw == "" || len(ids) > 100 {
+		response.InvalidParams(c, "msg_ids must contain 1 to 100 IDs")
+		return
+	}
+	for _, id := range ids {
+		if id == "" || len(id) > 64 {
+			response.InvalidParams(c, "invalid message ID")
+			return
+		}
+	}
+	rows := make([]entity.PrivateMessage, 0, len(ids))
+	if err := database.DB.Select("msg_id", "delivered", "read").
+		Where("from_uid = ? AND msg_id IN ?", uid.(string), ids).Find(&rows).Error; err != nil {
+		response.Failed(c, "获取消息状态失败")
+		return
+	}
+	type status struct {
+		MsgID     string `json:"msg_id"`
+		Delivered bool   `json:"delivered"`
+		IsRead    bool   `json:"is_read"`
+	}
+	items := make([]status, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, status{MsgID: row.MsgID, Delivered: row.Delivered || row.Read == 1, IsRead: row.Read == 1})
+	}
+	response.Success(c, gin.H{"messages": items})
 }
 
 func NewPrivateMessageHandler(msgRepo domain_repo.PrivateMessageRepository, readRepo domain_repo.UserRoomReadRepository) *PrivateMessageHandler {
@@ -49,7 +110,7 @@ func (h *PrivateMessageHandler) SendMessage(c *gin.Context) {
 	response.Success(c, gin.H{
 		"msg_id": result.MsgID, "seq": result.Seq, "send_time": result.SendTime,
 		"client_msg_id": req.ClientMsgID, "from_uid": in.SenderUID, "to_uid": req.ToUID,
-		"content": req.Content, "acked": true,
+		"content": req.Content, "acked": true, "delivered": result.Delivered, "is_read": result.IsRead,
 	})
 }
 
@@ -102,6 +163,7 @@ func (h *PrivateMessageHandler) GetConversation(c *gin.Context) {
 			"send_time": msg.SendTime,
 			"is_read":   isRead,
 			"acked":     isAcked,
+			"delivered": msg.Delivered || isRead,
 		})
 	}
 

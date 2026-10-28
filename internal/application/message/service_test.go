@@ -78,12 +78,17 @@ func TestSendRetryReturnsOriginalAndRejectsConflict(t *testing.T) {
 			mock.ExpectExec("INSERT INTO `message_requests`").WillReturnError(&mysqlDriver.MySQLError{Number: 1062, Message: "duplicate"})
 			mock.ExpectRollback()
 			mock.ExpectQuery("SELECT .* FROM `message_requests`").WillReturnRows(sqlmock.NewRows([]string{"sender_uid", "client_msg_id", "fingerprint", "msg_id", "seq", "send_time"}).AddRow("alice", "client-3", fp, "original", 5, 1234))
+			if !conflict {
+				mock.ExpectQuery("SELECT .* FROM `private_messages`").
+					WithArgs("original", "alice", "bob", 1).
+					WillReturnRows(sqlmock.NewRows([]string{"id", "msg_id", "delivered", "read"}).AddRow(1, "original", false, 1))
+			}
 			got, err := Send(context.Background(), db, in)
 			if conflict {
 				if !errors.Is(err, ErrConflict) {
 					t.Fatalf("expected conflict, got %v", err)
 				}
-			} else if err != nil || !got.Duplicate || got.MsgID != "original" || got.Seq != 5 {
+			} else if err != nil || !got.Duplicate || got.MsgID != "original" || got.Seq != 5 || !got.Delivered || !got.IsRead {
 				t.Fatalf("unexpected retry result %+v: %v", got, err)
 			}
 			if err := mock.ExpectationsWereMet(); err != nil {

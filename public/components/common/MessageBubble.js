@@ -4,10 +4,12 @@
 import { Avatar } from './Avatar.js';
 import { esc, isImageUrl, fullTime } from '../../utils/format.js';
 import { isEncrypted } from '../../services/e2ee.js';
+import { messageStatus } from '../../services/message-status.js';
 
 export function renderMessageBubble(msg, isSelf, peerOnline) {
   const row = document.createElement('div');
   row.className = 'msg-row' + (isSelf ? ' self' : ' other');
+  if (msg.msg_id) row.dataset.msgId = String(msg.msg_id);
 
   row.appendChild(Avatar(isSelf ? '' : (msg.from_nickname || msg.from_username), {
     online: !isSelf && !!peerOnline,
@@ -51,16 +53,21 @@ export function renderMessageBubble(msg, isSelf, peerOnline) {
     bubble.appendChild(text);
   }
 
-  main.appendChild(bubble);
-
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  const timestamp = document.createElement('time');
+  timestamp.className = 'msg-time';
+  const date = new Date(msg.send_time);
+  if (!Number.isNaN(date.getTime())) {
+    timestamp.textContent = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    timestamp.title = fullTime(msg.send_time);
+  }
+  meta.appendChild(timestamp);
   const status = document.createElement('div');
   status.className = 'msg-status';
   if (isSelf) {
-    // 纸飞机风格：单对号=已发送(acked)，双对号=对方已读(is_read)
-    const check = document.createElement('span');
-    check.className = 'msg-check';
-    check.textContent = '\u2713';
-    if (msg.failed) {
+    const state = messageStatus(msg);
+    if (state === 'failed') {
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.className = 'retry-message';
@@ -69,26 +76,37 @@ export function renderMessageBubble(msg, isSelf, peerOnline) {
         detail: { clientMsgID: msg.client_msg_id }
       })));
       status.appendChild(retry);
-    } else if (msg.read_count != null) {
+    } else if (state === 'group') {
       status.textContent = '已读 ' + msg.read_count + '/' + (msg.total_count ?? 0);
-    } else if (msg.is_read) {
-      const check2 = document.createElement('span');
-      check2.className = 'msg-check msg-check-read';
-      check2.textContent = '\u2713';
-      status.appendChild(check);
-      status.appendChild(check2);
-    } else if (msg.acked) {
-      status.appendChild(check);
+    } else if (state === 'read' || state === 'delivered') {
+      status.appendChild(renderCheck(state));
     } else {
-      status.textContent = '\u53d1\u9001\u4e2d...';
+      status.textContent = state === 'sent' ? '已发送' : '发送中';
     }
-  } else {
-    status.textContent = fullTime(msg.send_time);
+    meta.appendChild(status);
   }
-  main.appendChild(status);
+  bubble.appendChild(meta);
+  main.appendChild(bubble);
 
   row.appendChild(main);
   return { row, status, bubble };
+}
+
+function renderCheck(state) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', state === 'read' ? '0 0 20 14' : '0 0 14 14');
+  svg.setAttribute('class', 'msg-check' + (state === 'read' ? ' msg-check-read' : ''));
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', state === 'read' ? '对方已读' : '对方已接收');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', state === 'read' ? 'M1 7.2l3.5 3.5L12 3M7 7.2l3.5 3.5L18 3' : 'M1 7.2l3.5 3.5L12 3');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', '1.8');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.appendChild(path);
+  return svg;
 }
 
 function isPureEmoji(content) {

@@ -47,3 +47,7 @@ export const readStatus = (roomId) =>
   http.get('/api/message/read-status?room_id=' + encodeURIComponent(roomId));
 
 export const privateUnreadCounts = () => http.get('/api/private/unread-counts');
+
+export const privateUndelivered = () => http.get('/api/private/undelivered?limit=100');
+export const privateMessageStatuses = ids =>
+  http.get('/api/private/status?msg_ids=' + encodeURIComponent(ids.join(',')));

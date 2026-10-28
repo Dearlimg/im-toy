@@ -129,6 +129,10 @@ func SyncPrivate(c *gin.Context) {
 	}
 	items := make([]privateSyncMessage, 0, len(rows))
 	for i := range rows {
+		// Legacy read receipts prove the message reached the recipient.
+		if rows[i].Read == 1 {
+			rows[i].Delivered = true
+		}
 		items = append(items, privateSyncMessage{PrivateMessage: &rows[i], IsRead: rows[i].Read == 1, Acked: true})
 	}
 	first, last := syncCursor{}, syncCursor{}

@@ -12,6 +12,8 @@ import { groupMembers } from '../../services/api.js';
 import { fingerprint } from '../../services/e2ee.js';
 
 const titleEl = document.getElementById('chatTitle');
+const headerAvatar = document.getElementById('chatHeaderAvatar');
+const chatArea = document.getElementById('chatArea');
 const messagesEl = document.getElementById('chatMessages');
 const emptyTip = document.getElementById('chatEmptyTip');
 
@@ -30,19 +32,26 @@ export function setPeerOnlineProvider(fn) {
 let headerVersion = 0;
 export function updateHeader(chatType, obj) {
   const version = ++headerVersion;
+  chatArea.classList.toggle('private-chat', !!obj && chatType === 'friend');
+  chatArea.classList.toggle('group-chat', !!obj && chatType === 'group');
   const groupAction = document.querySelector('.header-actions .group-action');
   if (groupAction) groupAction.hidden = chatType !== 'group' || !obj;
   if (!obj) {
+    headerAvatar.hidden = true;
+    headerAvatar.textContent = '';
     titleEl.textContent = '微聊';
     return;
   }
+  const label = chatType === 'friend' ? (obj.nickname || obj.username) : obj.name;
+  headerAvatar.textContent = (label || '?').trim().charAt(0).toUpperCase();
+  headerAvatar.hidden = false;
   if (chatType === 'friend') {
     const name = esc(obj.nickname || obj.username);
     titleEl.innerHTML = name + '<small>私聊</small>';
     if (obj.pubkey) {
       // 端到端加密安全码：双方线下/语音比对，防止中间人攻击
       fingerprint(obj.pubkey).then(fp => {
-        if (version === headerVersion) titleEl.innerHTML = name + '<small>公钥指纹 · ' + esc(fp) + '</small>';
+        if (version === headerVersion) titleEl.innerHTML = name + '<small title="公钥指纹：' + esc(fp) + '">私聊 · 公钥指纹已生成</small>';
       }).catch(() => {});
     }
   } else {
