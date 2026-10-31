@@ -3,6 +3,7 @@ package repository
 import "im-chat/internal/domain/entity"
 
 type FriendRepository interface {
+	AcceptRequest(uid, friendUID string) error
 	Create(friend *entity.Friend) error
 	FindByUID(uid string) ([]*entity.Friend, error)
 	FindByUIDAndFriendUID(uid, friendUID string) (*entity.Friend, error)

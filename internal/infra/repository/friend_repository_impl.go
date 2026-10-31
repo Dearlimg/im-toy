@@ -4,6 +4,9 @@ import (
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/domain/repository"
 	"im-chat/internal/infra/database"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type FriendRepositoryImpl struct{}
@@ -13,7 +16,28 @@ func NewFriendRepository() repository.FriendRepository {
 }
 
 func (r *FriendRepositoryImpl) Create(friend *entity.Friend) error {
-	return database.DB.Create(friend).Error
+	// Restore a deleted relationship without violating the pair's unique index.
+	return database.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "uid"}, {Name: "friend_uid"}},
+		DoUpdates: clause.AssignmentColumns([]string{"deleted_at", "status", "remark", "updated_at"}),
+	}).Create(friend).Error
+}
+
+func (r *FriendRepositoryImpl) AcceptRequest(uid, friendUID string) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var request entity.Friend
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("uid = ? AND friend_uid = ?", friendUID, uid).First(&request).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&request).Update("status", 1).Error; err != nil {
+			return err
+		}
+		reverse := &entity.Friend{UID: uid, FriendUID: friendUID, Status: 1}
+		return tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "uid"}, {Name: "friend_uid"}},
+			DoUpdates: clause.AssignmentColumns([]string{"deleted_at", "status", "updated_at"}),
+		}).Create(reverse).Error
+	})
 }
 
 func (r *FriendRepositoryImpl) FindByUID(uid string) ([]*entity.Friend, error) {
@@ -36,7 +60,7 @@ func (r *FriendRepositoryImpl) FindFriendsWithUserInfo(uid string) ([]map[string
 	err := database.DB.Table("friends").
 		Select("friends.*, users.username, users.nickname, users.avatar, users.pub_key").
 		Joins("LEFT JOIN users ON users.uid = friends.friend_uid").
-		Where("friends.uid = ? AND friends.status = ?", uid, 1).
+		Where("friends.uid = ? AND friends.status = ? AND friends.deleted_at IS NULL", uid, 1).
 		Find(&results).Error
 	return results, err
 }
@@ -46,7 +70,7 @@ func (r *FriendRepositoryImpl) FindFriendRequests(uid string) ([]map[string]inte
 	err := database.DB.Table("friends").
 		Select("friends.*, users.username, users.nickname, users.avatar").
 		Joins("LEFT JOIN users ON users.uid = friends.uid").
-		Where("friends.friend_uid = ? AND friends.status = ?", uid, 2).
+		Where("friends.friend_uid = ? AND friends.status = ? AND friends.deleted_at IS NULL", uid, 2).
 		Find(&results).Error
 	return results, err
 }

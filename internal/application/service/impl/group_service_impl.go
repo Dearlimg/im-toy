@@ -8,6 +8,8 @@ import (
 	"im-chat/internal/domain/repository"
 	"im-chat/internal/infra/idgen"
 	"im-chat/internal/interface/http/response"
+	"strings"
+	"unicode/utf8"
 )
 
 type GroupServiceImpl struct {
@@ -25,18 +27,36 @@ func NewGroupServiceImpl(groupRepo repository.GroupRepository, messageReadRepo r
 }
 
 func (s *GroupServiceImpl) CreateGroup(currentUID string, req *dto.CreateGroupReq) (*dto.GroupResp, error) {
+	name := strings.TrimSpace(req.Name)
+	if n := utf8.RuneCountInString(name); n < 2 || n > 50 {
+		return nil, apperrors.New(response.CodeInvalidParams, "群名称需 2-50 字")
+	}
+	seen := map[string]bool{currentUID: true}
+	var uids []string
+	for _, uid := range req.MemberUIDs {
+		if uid == "" || seen[uid] {
+			continue
+		}
+		seen[uid] = true
+		uids = append(uids, uid)
+	}
+	if len(uids) > 499 {
+		return nil, apperrors.New(response.CodeInvalidParams, "群成员不能超过500人")
+	}
+	if len(uids) > 0 {
+		users, err := s.userRepo.FindByUIDs(uids)
+		if err != nil || len(users) != len(uids) {
+			return nil, apperrors.New(response.CodeUserNotFound, response.GetMsg(response.CodeUserNotFound))
+		}
+	}
 	groupID := idgen.Gen.NextUID()
 
 	group := &entity.Group{
 		GroupID:   groupID,
-		Name:      req.Name,
+		Name:      name,
 		OwnerUID:  currentUID,
 		MaxMember: 500,
 		Status:    1,
-	}
-
-	if err := s.groupRepo.CreateGroup(group); err != nil {
-		return nil, apperrors.New(response.CodeGroupCreateFailed, response.GetMsg(response.CodeGroupCreateFailed))
 	}
 
 	owner := &entity.GroupMember{
@@ -45,23 +65,18 @@ func (s *GroupServiceImpl) CreateGroup(currentUID string, req *dto.CreateGroupRe
 		Role:    1,
 		Status:  1,
 	}
-	if err := s.groupRepo.AddMember(owner); err != nil {
-		return nil, apperrors.New(response.CodeGroupAddOwnerFailed, response.GetMsg(response.CodeGroupAddOwnerFailed))
-	}
-
-	for _, uid := range req.MemberUIDs {
-		if uid == "" || uid == currentUID {
-			continue
-		}
+	members := []*entity.GroupMember{owner}
+	for _, uid := range uids {
 		member := &entity.GroupMember{
 			GroupID: groupID,
 			UID:     uid,
 			Role:    2,
 			Status:  1,
 		}
-		if err := s.groupRepo.AddMember(member); err != nil {
-			continue
-		}
+		members = append(members, member)
+	}
+	if err := s.groupRepo.CreateWithMembers(group, members); err != nil {
+		return nil, apperrors.New(response.CodeGroupCreateFailed, response.GetMsg(response.CodeGroupCreateFailed))
 	}
 
 	return &dto.GroupResp{

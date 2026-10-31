@@ -73,7 +73,7 @@ function ensureGroupAction() {
     const cur = groupsStore.get().current;
     if (!cur) return;
     try {
-      const members = await groupMembers(cur.id);
+      const members = await groupMembers(cur.group_id);
       groupsStore.set({ members: members || [] });
       openModal('群成员', () => {
         const wrap = document.createElement('div');
@@ -88,7 +88,7 @@ function ensureGroupAction() {
           wrap.appendChild(row);
         });
         return wrap;
-      }, [{ text: '关闭', onClick: () => false }]);
+      }, [{ text: '关闭', onClick: () => true }]);
     } catch (e) {
       Toast(e.message);
     }

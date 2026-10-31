@@ -531,7 +531,7 @@ export async function searchUser() {
         wrap.appendChild(row);
       });
       return wrap;
-    }, [{ text: '关闭', onClick: () => false }]);
+    }, [{ text: '关闭', onClick: () => true }]);
   } catch (e) {
     Toast(e.message);
   }

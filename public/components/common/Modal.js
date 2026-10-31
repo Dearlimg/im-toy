@@ -24,9 +24,15 @@ export function openModal(title, buildBody, actions) {
       btn.className = a.primary ? 'btn-primary' : 'btn-cancel';
       btn.style.margin = '0';
       btn.style.width = 'auto';
-      btn.addEventListener('click', () => {
-        const result = a.onClick ? a.onClick() : null;
-        if (result !== false) close();
+      btn.addEventListener('click', async () => {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        try {
+          const result = a.onClick ? await a.onClick() : null;
+          if (result !== false) close();
+        } finally {
+          btn.disabled = false;
+        }
       });
       row.appendChild(btn);
     });

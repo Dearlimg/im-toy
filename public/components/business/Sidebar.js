@@ -28,6 +28,7 @@ export function switchSide(tab) {
   document.querySelectorAll('.side-tabs button').forEach(b =>
     b.classList.toggle('active', b.dataset.tab === tab));
   render();
+  void loadAll();
 }
 
 export async function loadAll() {
@@ -220,8 +221,8 @@ function openCreateGroup() {
       cb.type = 'checkbox';
       cb.value = f.friend_uid;
       cb.addEventListener('change', () => {
-        if (cb.checked) checked.add(f.uid);
-        else checked.delete(f.uid);
+        if (cb.checked) checked.add(f.friend_uid);
+        else checked.delete(f.friend_uid);
       });
       label.appendChild(cb);
       label.appendChild(Avatar(f.nickname || f.username, { size: 28, fontSize: 12 }));
@@ -235,7 +236,7 @@ function openCreateGroup() {
   };
 
   openModal('创建群聊', body, [
-    { text: '取消', onClick: () => false },
+    { text: '取消', onClick: () => true },
     {
       text: '创建', primary: true,
       onClick: async () => {
@@ -265,7 +266,7 @@ function openRequestDetail(r) {
     d.innerHTML = '用户 <b>' + esc(r.nickname || r.username) + '</b> 请求添加你为好友';
     return d;
   }, [
-    { text: '关闭', onClick: () => false },
+    { text: '关闭', onClick: () => true },
     {
       text: '接受', primary: true,
       onClick: async () => {

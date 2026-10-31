@@ -65,18 +65,8 @@ func (s *FriendServiceImpl) AcceptFriend(currentUID string, req *dto.AcceptFrien
 		return apperrors.New(response.CodeFriendRequestInvalid, response.GetMsg(response.CodeFriendRequestInvalid))
 	}
 
-	friend.Status = 1
-	if err := s.friendRepo.Update(friend); err != nil {
+	if err := s.friendRepo.AcceptRequest(currentUID, req.FriendUID); err != nil {
 		return apperrors.New(response.CodeFriendAcceptFailed, response.GetMsg(response.CodeFriendAcceptFailed))
-	}
-
-	reverseFriend := &entity.Friend{
-		UID:       currentUID,
-		FriendUID: req.FriendUID,
-		Status:    1,
-	}
-	if err := s.friendRepo.Create(reverseFriend); err != nil {
-		return apperrors.New(response.CodeFriendCreateFailed, response.GetMsg(response.CodeFriendCreateFailed))
 	}
 
 	return nil
@@ -145,8 +135,11 @@ func (s *FriendServiceImpl) GetFriendRequests(currentUID string) ([]*dto.FriendR
 
 func getString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
+		switch value := v.(type) {
+		case string:
+			return value
+		case []byte:
+			return string(value)
 		}
 	}
 	return ""

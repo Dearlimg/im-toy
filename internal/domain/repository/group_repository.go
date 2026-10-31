@@ -3,6 +3,7 @@ package repository
 import "im-chat/internal/domain/entity"
 
 type GroupRepository interface {
+	CreateWithMembers(group *entity.Group, members []*entity.GroupMember) error
 	CreateGroup(group *entity.Group) error
 	FindGroupByID(groupID string) (*entity.Group, error)
 	FindGroupsByUID(uid string) ([]*entity.Group, error)

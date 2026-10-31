@@ -1,12 +1,22 @@
 package repository
 
 import (
+	"gorm.io/gorm"
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/domain/repository"
 	"im-chat/internal/infra/database"
 )
 
 type GroupRepositoryImpl struct{}
+
+func (r *GroupRepositoryImpl) CreateWithMembers(group *entity.Group, members []*entity.GroupMember) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(group).Error; err != nil {
+			return err
+		}
+		return tx.Create(&members).Error
+	})
+}
 
 func NewGroupRepository() repository.GroupRepository {
 	return &GroupRepositoryImpl{}

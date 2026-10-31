@@ -21,5 +21,5 @@ export function setCurrentGroup(group) {
 }
 
 export function findGroup(id) {
-  return groupsStore.get().groups.find(g => String(g.id) === String(id)) || null;
+  return groupsStore.get().groups.find(g => String(g.group_id) === String(id)) || null;
 }
