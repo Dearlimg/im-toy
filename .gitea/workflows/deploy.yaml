@@ -6,28 +6,24 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: 拉取源码（act_runner 不自动 clone，需显式拉取）
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -e
-          git clone --depth=1 --branch=master "http://gao:${GITHUB_TOKEN}@121.40.235.227:3000/gao/im-toy.git" .
-          git log --oneline -1
-          echo "WORKSPACE_FILES=$(find . -type f | wc -l)"
-
-      - name: 传输源码到 natvps
+      - name: 在 natvps 上拉取源码（走 gitea 本机 NodePort，绕开 dind 网络栈）
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          tar czf - --exclude=./.git --exclude=./.idea --exclude=./.codebuddy . \
-            | ssh -o StrictHostKeyChecking=no -p 46546 root@114.66.0.89 \
-              "rm -rf /root/workspace/im-toy-src && mkdir -p /root/workspace/im-toy-src && tar xzf - -C /root/workspace/im-toy-src && echo SOURCE_FILES=\$(find /root/workspace/im-toy-src -type f | wc -l)"
+          ssh -o StrictHostKeyChecking=no -p 46546 root@114.66.0.89 \
+            "rm -rf /root/workspace/im-toy-src && git clone --depth=1 --branch=master http://gao:${GITHUB_TOKEN}@127.0.0.1:30300/gao/im-toy.git /root/workspace/im-toy-src 2>&1 | grep -v Cloning; echo CLONE_COMMIT=\$(git -C /root/workspace/im-toy-src log --oneline -1)"
 
       - name: 部署（编译→测试→镜像→备份→重启→前端→验证）
         run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
           ssh -o StrictHostKeyChecking=no -p 46546 root@114.66.0.89 \
             "bash /root/deploy-im-toy-remote.sh /root/workspace/im-toy-src"
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
