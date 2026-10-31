@@ -6,6 +6,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: 拉取源码（act_runner 不自动 clone，需显式拉取）
+        run: |
+          set -e
+          git clone --depth=1 --branch=master "http://gao:${GITHUB_TOKEN}@121.40.235.227:3000/gao/im-toy.git" .
+          git log --oneline -1
+          echo "WORKSPACE_FILES=$(find . -type f | wc -l)"
+
       - name: 传输源码到 natvps
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
