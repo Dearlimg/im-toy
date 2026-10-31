@@ -11,9 +11,9 @@ export function renderMessageBubble(msg, isSelf, peerOnline) {
   row.className = 'msg-row' + (isSelf ? ' self' : ' other');
   if (msg.msg_id) row.dataset.msgId = String(msg.msg_id);
 
-  row.appendChild(Avatar(isSelf ? '' : (msg.from_nickname || msg.from_username), {
+  row.appendChild(Avatar(isSelf ? '我' : (msg.from_nickname || msg.from_username), {
     online: !isSelf && !!peerOnline,
-    offline: !isSelf && !peerOnline
+    offline: !isSelf && peerOnline === false
   }));
 
   const main = document.createElement('div');
@@ -33,7 +33,7 @@ export function renderMessageBubble(msg, isSelf, peerOnline) {
     // E2EE 密文：解密完成后会被替换为明文并重渲染，此处占位
     const span = document.createElement('span');
     span.className = 'enc-msg';
-    span.textContent = '\u{1F512} 加密消息';
+    span.textContent = '此消息暂时无法查看';
     bubble.appendChild(span);
   } else if (isImageUrl(msg.content)) {
     const img = document.createElement('img');

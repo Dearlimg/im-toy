@@ -14,6 +14,7 @@ type GroupResp struct {
 }
 
 type GroupMemberResp struct {
+	IsOnline bool   `json:"is_online"`
 	UID      string `json:"uid"`
 	Username string `json:"username"`
 	Nickname string `json:"nickname"`

@@ -9,7 +9,7 @@ import { conversationsStore } from '../../store/conversations.js';
 import { groupsStore } from '../../store/groups.js';
 import { esc } from '../../utils/format.js';
 import { groupMembers } from '../../services/api.js';
-import { fingerprint } from '../../services/e2ee.js';
+import { findFriend } from '../../store/friends.js';
 
 const titleEl = document.getElementById('chatTitle');
 const headerAvatar = document.getElementById('chatHeaderAvatar');
@@ -29,9 +29,7 @@ export function setPeerOnlineProvider(fn) {
   getPeerOnline = fn;
 }
 
-let headerVersion = 0;
 export function updateHeader(chatType, obj) {
-  const version = ++headerVersion;
   chatArea.classList.toggle('private-chat', !!obj && chatType === 'friend');
   chatArea.classList.toggle('group-chat', !!obj && chatType === 'group');
   const groupAction = document.querySelector('.header-actions .group-action');
@@ -48,14 +46,8 @@ export function updateHeader(chatType, obj) {
   if (chatType === 'friend') {
     const name = esc(obj.nickname || obj.username);
     titleEl.innerHTML = name + '<small>私聊</small>';
-    if (obj.pubkey) {
-      // 端到端加密安全码：双方线下/语音比对，防止中间人攻击
-      fingerprint(obj.pubkey).then(fp => {
-        if (version === headerVersion) titleEl.innerHTML = name + '<small title="公钥指纹：' + esc(fp) + '">私聊 · 公钥指纹已生成</small>';
-      }).catch(() => {});
-    }
   } else {
-    titleEl.innerHTML = esc(obj.name) + '<small>群聊 · 未端到端加密</small>';
+    titleEl.innerHTML = esc(obj.name);
     ensureGroupAction();
     const action = document.querySelector('.header-actions .group-action');
     if (action) action.hidden = false;
@@ -188,7 +180,9 @@ function renderMessages(st, oldKeys) {
       fragment.appendChild(div);
     }
     const isSelf = String(msg.from_uid) === String(getUid());
-    const { row } = renderMessageBubble(msg, isSelf, getPeerOnline());
+    const member = groupsStore.get().members.find(m => String(m.uid) === String(msg.from_uid));
+    const online = st.chatType === 'friend' ? getPeerOnline() : (findFriend(msg.from_uid)?.is_online ?? member?.is_online);
+    const { row } = renderMessageBubble(msg, isSelf, online);
     if (oldKeys && !oldKeys.has(messageKey(msg))) row.classList.add('message-enter');
     fragment.appendChild(row);
   });

@@ -58,7 +58,7 @@ export async function initE2EE() {
 }
 
 // 每个账号单独保存设备密钥。新设备替换公钥需要明确确认。
-export async function ensureE2EE(uid) {
+export async function ensureE2EE(uid, { readOnly = false } = {}) {
   if (!uid) return false;
   accountStorage = KEY_STORAGE + ':' + uid;
   let serverKey;
@@ -72,6 +72,7 @@ export async function ensureE2EE(uid) {
     console.warn('could not check registered key:', e);
     return false;
   }
+  if (readOnly) return !!getKeyPair();
   const ok = await initE2EE();
   if (!ok) return false;
   const localKey = getKeyPair().pubkey;

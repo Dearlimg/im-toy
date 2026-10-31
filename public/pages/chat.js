@@ -3,9 +3,9 @@
 
 import { authStore, loadSession, clearSession } from '../store/auth.js';
 import { setCurrentFriend, updateFriendOnline, findFriend } from '../store/friends.js';
-import { setCurrentGroup } from '../store/groups.js';
+import { setCurrentGroup, groupsStore } from '../store/groups.js';
 import { conversationsStore, openConversation, pushMessage, mergeMessages, updateMessageRead, updateMessageDelivered, applyDeliveryStatuses, updateMessageContent, markMessageFailed, markMessagePending } from '../store/conversations.js';
-import { ensureE2EE, encryptContent, decryptContent, isEncrypted, verifyPeerKey } from '../services/e2ee.js';
+import { ensureE2EE, decryptContent, isEncrypted } from '../services/e2ee.js';
 import { unreadStore, setPrivateUnread, increment, clear, totalCount } from '../store/unread.js';
 
 import { initAuthForm } from '../components/business/AuthForm.js';
@@ -14,7 +14,7 @@ import { updateHeader, renderAll, scrollToBottom, setUidProvider, setPeerOnlineP
 import { initInput, setSendHandler } from '../components/business/ChatInput.js';
 import { Toast } from '../components/common/Toast.js';
 
-import { syncMessages, privateUnreadCounts, privateUndelivered, privateMessageStatuses, friendSearch, friendAdd } from '../services/api.js';
+import { syncMessages, privateUnreadCounts, privateUndelivered, privateMessageStatuses, friendSearch, friendAdd, groupMembers } from '../services/api.js';
 import { openModal } from '../components/common/Modal.js';
 import { connect, disconnect, onMessage, send, isOpen } from '../services/ws.js';
 import { createDeliveryQueue } from '../services/delivery.js';
@@ -26,7 +26,6 @@ const meAvatar = document.getElementById('meAvatar');
 const searchInput = document.getElementById('searchInput');
 
 let myUid = null;
-let e2eeReady = false;
 let pendingMessages = new Map();
 let failedMessages = new Set();
 let syncState = null;
@@ -90,9 +89,11 @@ async function enterApp() {
   deliveryQueue = createDeliveryQueue(myUid, send);
   meNick.textContent = u.nickname || u.username || '我';
   meAvatar.textContent = (u.nickname || u.username || '我').charAt(0).toUpperCase();
+  document.getElementById('railProfile').textContent = meAvatar.textContent;
+  document.getElementById('railProfile').title = u.nickname || u.username || '我';
 
   connect();
-  e2eeReady = await ensureE2EE(myUid);
+  await ensureE2EE(myUid, { readOnly: true });
   await loadAll();
   loadUnread();
   render();
@@ -106,7 +107,7 @@ async function enterApp() {
   conversationsStore.subscribe(() => renderAll());
 
   // 侧栏 tab 切换
-  document.querySelectorAll('.side-tabs button').forEach(b => {
+  document.querySelectorAll('.side-tabs button, .rail-tab').forEach(b => {
     b.addEventListener('click', () => switchSide(b.dataset.tab));
   });
 }
@@ -134,10 +135,15 @@ async function selectFriend(f) {
 
 async function selectGroup(g) {
   setCurrentGroup(g);
+  groupsStore.set({ members: [] });
   openConversation('group', g.group_id);
   clear('group', g.group_id);
   peerOnline = false;
   updateHeader('group', g);
+  try {
+    const members = await groupMembers(g.group_id);
+    if (String(groupsStore.get().current?.group_id) === String(g.group_id)) groupsStore.set({ members: members || [] });
+  } catch (e) { console.warn('could not load group members', e); }
   await loadHistory('group', g.group_id);
   if (conversationsStore.get().chatType !== 'group' || String(conversationsStore.get().chatId) !== String(g.group_id)) return;
   sendReadReceipts();
@@ -311,22 +317,7 @@ async function handleSend(content) {
     Toast('请先选择一个会话');
     return false;
   }
-  let toSend = content;
-  // 私聊不允许静默降级明文。
-  if (st.chatType === 'friend') {
-    const peer = findFriend(st.chatId);
-    if (!e2eeReady || !peer || !peer.pubkey) {
-      Toast('无法加密：请确认双方均已启用密钥');
-      return false;
-    }
-    if (!await verifyPeerKey(myUid, st.chatId, peer.pubkey)) return false;
-    const cipher = await encryptContent(peer.pubkey, content);
-    if (!cipher) {
-      Toast('加密失败，消息未发送');
-      return false;
-    }
-    toSend = cipher;
-  }
+  const toSend = content;
   const current = conversationsStore.get();
   if (current.chatType !== st.chatType || String(current.chatId) !== String(st.chatId)) {
     Toast('会话已切换，消息未发送');
@@ -475,6 +466,7 @@ function handleWsEvent(type, msg) {
     case 'presence': {
       // 好友上下线实时更新：侧栏绿/灰点 + 当前会话对方头像
       updateFriendOnline(msg.uid, msg.online);
+      groupsStore.set({ members: groupsStore.get().members.map(m => String(m.uid) === String(msg.uid) ? { ...m, is_online: !!msg.online } : m) });
       if (st.chatType === 'friend' && String(st.chatId) === String(msg.uid)) {
         peerOnline = !!msg.online;
       }
@@ -543,6 +535,7 @@ searchInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') searchUser();
 });
 document.getElementById('logoutBtn')?.addEventListener('click', logout);
+document.getElementById('railLogout')?.addEventListener('click', logout);
 document.getElementById('clearBtn')?.addEventListener('click', clearMessages);
 document.getElementById('menuBtn')?.addEventListener('click', () => toggleSidebar(true));
 document.getElementById('mobileBackdrop')?.addEventListener('click', () => toggleSidebar(false));

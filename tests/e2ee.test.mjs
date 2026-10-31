@@ -22,6 +22,16 @@ globalThis.fetch = async (_url, options) => {
 
 const e2ee = await import('../public/services/e2ee.js');
 
+test('history-only initialization never creates or replaces device keys', async () => {
+  currentUser = 'history-only-new-device';
+  publicKeys.set(currentUser, 'existing-device-key');
+  window.confirm = () => { throw new Error('must not prompt'); };
+  assert.equal(await e2ee.ensureE2EE(currentUser, { readOnly: true }), false);
+  assert.equal(publicKeys.get(currentUser), 'existing-device-key');
+  assert.equal(localStorage.getItem('im_e2ee_keypair_v2:' + currentUser), null);
+  window.confirm = () => true;
+});
+
 test('accounts encrypt and decrypt, and key changes require confirmation', async () => {
   currentUser = 'alice';
   assert.equal(await e2ee.ensureE2EE(currentUser), true);

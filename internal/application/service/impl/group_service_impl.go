@@ -7,6 +7,7 @@ import (
 	"im-chat/internal/domain/entity"
 	"im-chat/internal/domain/repository"
 	"im-chat/internal/infra/idgen"
+	"im-chat/internal/infra/redis"
 	"im-chat/internal/interface/http/response"
 	"strings"
 	"unicode/utf8"
@@ -194,7 +195,12 @@ func (s *GroupServiceImpl) GetGroupMembers(currentUID, groupID string) ([]*dto.G
 	var resp []*dto.GroupMemberResp
 	for _, m := range members {
 		if user, ok := userMap[m.UID]; ok {
+			online := false
+			if redis.Cache != nil {
+				online, _ = redis.Cache.IsUserOnline(m.UID)
+			}
 			resp = append(resp, &dto.GroupMemberResp{
+				IsOnline: online,
 				UID:      user.UID,
 				Username: user.Username,
 				Nickname: user.Nickname,

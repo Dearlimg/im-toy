@@ -25,7 +25,7 @@ export function setHandlers({ selectFriend, selectGroup }) {
 
 export function switchSide(tab) {
   currentTab = tab;
-  document.querySelectorAll('.side-tabs button').forEach(b =>
+  document.querySelectorAll('.side-tabs button, .rail-tab').forEach(b =>
     b.classList.toggle('active', b.dataset.tab === tab));
   render();
   void loadAll();
