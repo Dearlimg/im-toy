@@ -1,0 +1,24 @@
+name: deploy-im-toy
+on:
+  push:
+    branches: [master]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 传输源码到 natvps
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          tar czf - --exclude=./.git --exclude=./.idea --exclude=./.codebuddy . \
+            | ssh -o StrictHostKeyChecking=no -p 46546 root@114.66.0.89 \
+              "rm -rf /root/workspace/im-toy-src && mkdir -p /root/workspace/im-toy-src && tar xzf - -C /root/workspace/im-toy-src && echo SOURCE_FILES=\$(find /root/workspace/im-toy-src -type f | wc -l)"
+
+      - name: 部署（编译→测试→镜像→备份→重启→前端→验证）
+        run: |
+          ssh -o StrictHostKeyChecking=no -p 46546 root@114.66.0.89 \
+            "bash /root/deploy-im-toy-remote.sh /root/workspace/im-toy-src"
