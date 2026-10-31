@@ -45,6 +45,8 @@ export function getCount(chatType, id) {
   return unreadStore.get().counts[key(chatType, id)] || 0;
 }
 
-export function totalCount() {
-  return Object.values(unreadStore.get().counts).reduce((a, b) => a + b, 0);
+export function totalCount(chatType) {
+  return Object.entries(unreadStore.get().counts)
+    .filter(([key]) => !chatType || key.startsWith(chatType + ':'))
+    .reduce((sum, [, count]) => sum + Number(count), 0);
 }

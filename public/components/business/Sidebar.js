@@ -6,10 +6,12 @@ import { Toast } from '../common/Toast.js';
 import { openModal } from '../common/Modal.js';
 import { friendsStore } from '../../store/friends.js';
 import { groupsStore } from '../../store/groups.js';
-import { getCount } from '../../store/unread.js';
+import { getCount, totalCount } from '../../store/unread.js';
+import { getSummary, summaryText, updateSummary } from '../../store/summaries.js';
+import { conversationsStore } from '../../store/conversations.js';
 import { listTime, preview, unreadLabel, esc } from '../../utils/format.js';
 import {
-  friendList, friendRequests, friendAccept, friendDelete, groupList, groupCreate
+  friendList, friendRequests, friendAccept, friendDelete, groupList, groupCreate, syncMessages
 } from '../../services/api.js';
 
 const listArea = document.getElementById('listArea');
@@ -37,16 +39,46 @@ export async function loadAll() {
     friendsStore.set({ friends: f || [], requests: r || [] });
     groupsStore.set({ groups: g || [] });
     render();
+    await refreshSummaries(f || [], g || []);
   } catch (e) {
     Toast('加载数据失败: ' + e.message);
   }
 }
 
 export function render() {
+  renderNavigationBadges();
   listArea.innerHTML = '';
   if (currentTab === 'friends') renderFriends();
   else if (currentTab === 'requests') renderRequests();
   else renderGroups();
+}
+
+function renderNavigationBadges() {
+  const counts = { friends: totalCount('friend'), groups: totalCount('group'), requests: friendsStore.get().requests.length };
+  document.querySelectorAll('.side-tabs button, .rail-tab').forEach(button => {
+    button.querySelector('.nav-unread')?.remove();
+    const count = counts[button.dataset.tab];
+    if (!count) return;
+    const badge = document.createElement('span');
+    badge.className = 'nav-unread';
+    badge.textContent = unreadLabel(count);
+    badge.setAttribute('aria-label', count + '条未读');
+    button.appendChild(badge);
+  });
+}
+
+export async function refreshSummaries(friends, groups) {
+  const queue = [...friends.map(f => ['friend', f.friend_uid]), ...groups.map(g => ['group', g.group_id])];
+  await Promise.all(Array.from({ length: Math.min(4, queue.length) }, async () => {
+    while (queue.length) {
+      const [type, id] = queue.shift();
+      try {
+        const page = await syncMessages(type, id, { tail: true, limit: 1 });
+        for (const message of page.messages || []) updateSummary(type, id, message);
+      } catch (e) { console.warn('could not refresh conversation summary', e); }
+    }
+  }));
+  render();
 }
 
 function renderFriends() {
@@ -56,12 +88,12 @@ function renderFriends() {
     return;
   }
   const sorted = friends.slice().sort((a, b) =>
-    (getCount('friend', b.friend_uid) || 0) - (getCount('friend', a.friend_uid) || 0));
+    (getSummary('friend', b.friend_uid)?.send_time || 0) - (getSummary('friend', a.friend_uid)?.send_time || 0));
   sorted.forEach(f => {
     const item = document.createElement('div');
     item.className = 'conv-item';
-    const cur = friendsStore.get().current;
-    if (cur && cur.kind === 'friend' && String(cur.friend_uid) === String(f.friend_uid)) {
+    const cur = conversationsStore.get();
+    if (cur.chatType === 'friend' && String(cur.chatId) === String(f.friend_uid)) {
       item.classList.add('active');
     }
 
@@ -70,7 +102,7 @@ function renderFriends() {
     const info = document.createElement('div');
     info.className = 'conv-info';
     info.innerHTML = '<div class="conv-name">' + esc(f.nickname || f.username) + '</div>'
-      + '<div class="conv-preview">' + (f.is_online ? '在线' : '离线') + '</div>';
+      + '<div class="conv-preview">' + esc(summaryText('friend', getSummary('friend', f.friend_uid))) + '</div>';
     item.appendChild(info);
 
     const right = document.createElement('div');
@@ -144,11 +176,11 @@ function renderGroups() {
     listArea.appendChild(tip);
     return;
   }
-  groups.forEach(g => {
+  groups.slice().sort((a, b) => (getSummary('group', b.group_id)?.send_time || 0) - (getSummary('group', a.group_id)?.send_time || 0)).forEach(g => {
     const item = document.createElement('div');
     item.className = 'conv-item';
-    const cur = groupsStore.get().current;
-    if (cur && cur.kind === 'group' && String(cur.group_id) === String(g.group_id)) {
+    const cur = conversationsStore.get();
+    if (cur.chatType === 'group' && String(cur.chatId) === String(g.group_id)) {
       item.classList.add('active');
     }
 
@@ -157,7 +189,7 @@ function renderGroups() {
     const info = document.createElement('div');
     info.className = 'conv-info';
     info.innerHTML = '<div class="conv-name">' + esc(g.name) + '</div>'
-      + '<div class="conv-preview">群聊</div>';
+      + '<div class="conv-preview">' + esc(summaryText('group', getSummary('group', g.group_id))) + '</div>';
     item.appendChild(info);
 
     const right = document.createElement('div');

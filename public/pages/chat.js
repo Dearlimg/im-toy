@@ -7,6 +7,7 @@ import { setCurrentGroup, groupsStore } from '../store/groups.js';
 import { conversationsStore, openConversation, pushMessage, mergeMessages, updateMessageRead, updateMessageDelivered, applyDeliveryStatuses, updateMessageContent, markMessageFailed, markMessagePending } from '../store/conversations.js';
 import { ensureE2EE, decryptContent, isEncrypted } from '../services/e2ee.js';
 import { unreadStore, setPrivateUnread, increment, clear, totalCount } from '../store/unread.js';
+import { summariesStore, updateSummary } from '../store/summaries.js';
 
 import { initAuthForm } from '../components/business/AuthForm.js';
 import { setHandlers as setSidebarHandlers, loadAll, switchSide, render } from '../components/business/Sidebar.js';
@@ -32,6 +33,15 @@ let syncState = null;
 let deliveryQueue = null;
 let inboxLoading = false;
 let inboxTimer = null;
+const receivedMessages = new Set();
+function firstArrival(type, id, message) {
+  if (!message.msg_id) return true;
+  const key = type + ':' + id + ':' + message.msg_id;
+  if (receivedMessages.has(key)) return false;
+  receivedMessages.add(key);
+  if (receivedMessages.size > 5000) receivedMessages.delete(receivedMessages.values().next().value);
+  return true;
+}
 const readReceiptsSent = new Map();
 function savePending() {
   try { localStorage.setItem('im_pending:' + myUid, JSON.stringify({ pending: [...pendingMessages], failed: [...failedMessages] })); } catch (e) { console.warn('pending messages not saved', e); }
@@ -85,6 +95,8 @@ async function enterApp() {
 
   const u = authStore.get().user || {};
   myUid = u.uid;
+  summariesStore.set({ latest: {} });
+  receivedMessages.clear();
   loadPending();
   deliveryQueue = createDeliveryQueue(myUid, send);
   meNick.textContent = u.nickname || u.username || '我';
@@ -105,6 +117,7 @@ async function enterApp() {
     render();
   });
   conversationsStore.subscribe(() => renderAll());
+  summariesStore.subscribe(() => render());
 
   // 侧栏 tab 切换
   document.querySelectorAll('.side-tabs button, .rail-tab').forEach(b => {
@@ -158,6 +171,7 @@ async function loadHistory(chatType, id) {
     const page = await syncMessages(chatType, id, { tail: true });
     let list = (page.messages || []).map(m => ({ ...m, acked: true }));
     if (chatType === 'friend') list = await Promise.all(list.map(m => resolveCipher(m, id)));
+    list.forEach(message => updateSummary(chatType, id, message));
     if (syncState !== state) return;
     if (chatType === 'friend') list.forEach(m => deliveryQueue?.enqueue(m));
     state.cursor = page.next_cursor || '';
@@ -194,6 +208,7 @@ async function syncCurrent() {
         ? await Promise.all(rows.map(msg => resolveCipher(msg, state.id))) : rows;
       if (syncState !== state) return;
       if (state.chatType === 'friend') messages.forEach(m => deliveryQueue?.enqueue(m));
+      messages.forEach(message => updateSummary(state.chatType, state.id, message));
       mergeMessages(messages);
       state.cursor = page.next_cursor || state.cursor;
       more = !!page.has_more;
@@ -345,6 +360,7 @@ async function handleSend(content) {
     acked: false,
     is_read: false
   });
+  updateSummary(st.chatType, st.chatId, { from_uid: u.uid, from_nickname: u.nickname || u.username, content, send_time: Date.now(), client_msg_id: clientMsgID });
   renderAll();
   scrollToBottom();
   return true;
@@ -399,6 +415,9 @@ function handleWsEvent(type, msg) {
       }
       // 当前会话的 chatId 是对方 uid，回显时 from_uid=自己 to_uid=对方
       const peerUid = fromMe ? msg.to_uid : msg.from_uid;
+      const fresh = firstArrival('friend', peerUid, msg);
+      updateSummary('friend', peerUid, msg);
+      resolveCipher(msg, peerUid).then(m => updateSummary('friend', peerUid, m));
       const isCurrent = st.chatType === 'friend' && String(st.chatId) === String(peerUid);
       if (isCurrent) {
         if (fromMe) {
@@ -414,7 +433,7 @@ function handleWsEvent(type, msg) {
           resolveCipher(msg, peerUid).then(m => {
             const current = conversationsStore.get();
             if (current.chatType !== 'friend' || String(current.chatId) !== String(peerUid)) {
-              increment('friend', peerUid);
+              if (fresh) increment('friend', peerUid);
               return;
             }
             pushMessage(m);
@@ -425,13 +444,15 @@ function handleWsEvent(type, msg) {
           });
         }
       } else {
-        if (!fromMe) increment('friend', peerUid);
+        if (!fromMe && fresh) increment('friend', peerUid);
       }
       break;
     }
     case 'group': {
       const gid = msg.group_id;
       if (gid == null) return;
+      const fresh = firstArrival('group', gid, msg);
+      updateSummary('group', gid, msg);
       // 服务端回显给发送方时标记 acked
       if (String(msg.from_uid) === String(myUid)) {
         msg.acked = true;
@@ -447,7 +468,7 @@ function handleWsEvent(type, msg) {
         scrollToBottom();
         requestAnimationFrame(sendReadReceipts);
       } else {
-        increment('group', gid);
+        if (fresh && String(msg.from_uid) !== String(myUid)) increment('group', gid);
       }
       break;
     }

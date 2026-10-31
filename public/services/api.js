@@ -36,7 +36,7 @@ export const groupMessages = (groupId, limit) =>
 
 export const syncMessages = (type, id, options = {}) => {
   const path = type === 'friend' ? '/api/sync/private?friend_uid=' : '/api/sync/group?group_id=';
-  const query = new URLSearchParams({ limit: '50' });
+  const query = new URLSearchParams({ limit: String(options.limit || 50) });
   if (options.tail) query.set('tail', '1');
   if (options.cursor) query.set('cursor', options.cursor);
   if (options.before) query.set('before', options.before);

@@ -20,6 +20,12 @@ body { background: #ededed; }
 .side-tabs button { padding: 9px 0 11px; font-size: 12px; }
 .side-tabs button.active { color: #079d4e; }
 .side-tabs button.active::after { background: #07b75b; height: 2px; }
+.side-tabs button, .rail-tab { position: relative; }
+.nav-unread, .unread-badge { display: inline-flex; justify-content: center; align-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 10px; background: #fa5151; color: #fff; font-size: 11px; line-height: 18px; font-weight: 500; }
+.nav-unread { position: absolute; top: 0; right: 0; z-index: 1; pointer-events: none; }
+.side-tabs .nav-unread { top: 1px; right: 1px; }
+.conv-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-info { min-width: 0; }
 .conv-item { min-height: 76px; margin: 0; padding: 14px 12px; border-radius: 0; border-bottom: 1px solid #e1e1e1; gap: 10px; }
 .conv-item:hover { background: #dfdfdf; }
 .conv-item.active { background: #d1d1d1; }
